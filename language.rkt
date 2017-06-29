@@ -62,7 +62,17 @@
   (kind-bind (var kind))
   (kind-env (kind-bind ...))
   (sort-bind (var sort))
-  (sort-env (sort-bind ...)))
+  (sort-env (sort-bind ...))
+  ;; Note: Unlike in earlier Redex models of DML-like languages, Redex's
+  ;; built-in binding mechanics only allow for a single namespace.
+  #:binding-forms
+  (λ var type expr #:refers-to var)
+  (Tλ var val #:refers-to var)
+  (Iλ var sort val #:refers-to var)
+  (Unbox (var_i var_e expr) expr #:refers-to (shadow var_i var_e))
+  (∀ var type #:refers-to var)
+  (Π var sort type #:refers-to var)
+  (Σ var sort type #:refers-to var))
 
 ;;; Build a ★ type from any (Shape -> ★) type by applying to the scalar Shape
 (define-metafunction Remora-explicit
