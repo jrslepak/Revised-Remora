@@ -1,6 +1,9 @@
 #lang racket
 
 (require redex)
+(provide Remora-explicit
+         scalar &-> &Π &Σ &∀ &
+         op->type)
 
 (define-language Remora-explicit
   (var variable-not-otherwise-mentioned)
@@ -17,6 +20,9 @@
   (expr scal
         (Arr (expr ...)
              (natural ...))
+        ;; For empty arrays, give element type instead of a list of elements.
+        (Arr type
+             (natural ...))
         (expr expr)
         (TApp expr type)
         (IApp expr idx)
@@ -27,7 +33,9 @@
   (op + - * and or not > < =
       length shape reduce iota reshape)
   (val scal
-       (Arr (val ...)
+       (Arr (scal ...)
+            (natural ...))
+       (Arr type
             (natural ...)))
   ;; Type-level pieces
   ;; Rather than a built-in, general Array type constructor, every type which is
@@ -143,8 +151,8 @@
                          (&Π [(l Dim) (s Shape)]
                              (&-> [(t {++ {Shp l} s})] Int)))]
   [(op->type shape) (&∀ [t]
-                        (&Π [(l Dim) (s Shape)]
-                            (&-> [(t {++ {Shp l} s})]
+                        (&Π [(s Shape)]
+                            (&-> [(t s)]
                                  (&Σ [(r Dim)] (Int {Shp r})))))]
   [(op->type reduce) (&∀ [t]
                          (&Π [(l Dim) (f Shape) (c Shape)]
