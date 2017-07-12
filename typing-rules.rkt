@@ -2,6 +2,7 @@
 
 (require redex
          "language.rkt")
+(provide Remora-annotated)
 
 (module+ test
   (require rackunit))
@@ -26,7 +27,8 @@
           (Tλ var expr:t : type)
           (Iλ var sort expr:t : type))
   (val:t scal:t
-         (Arr (scal:t ...) (natural ...) : type)))
+         (Arr (scal:t ...) (natural ...) : type))
+  (var:t (var : type)))
 
 (define-judgment-form Remora-explicit
   #:mode (sort-of I I O)
