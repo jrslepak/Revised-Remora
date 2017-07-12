@@ -19,10 +19,10 @@
         (Iλ var sort val))
   (expr scal
         (Arr (expr ...)
-             (natural ...))
+             (natural ...+))
         ;; For empty arrays, give element type instead of a list of elements.
         (Arr type
-             (natural ...))
+             (natural ...+))
         (expr expr)
         (TApp expr type)
         (IApp expr idx)

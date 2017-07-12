@@ -6,6 +6,28 @@
 (module+ test
   (require rackunit))
 
+;;; ___:t versions of Remora abstract syntax include a type annotation on each
+;;; expression, so that the type information is readily available for the
+;;; reduction semantics. Using an extended language rather than a completely
+;;; separate language means primops, base values, and environment structure can
+;;; be reused as is, and metafunctions can cross between "multiple" languages.
+(define-extended-language Remora-annotated Remora-explicit
+  (expr:t scal:t
+          (Arr (expr:t ...) (natural ...) : type)
+          (expr:t expr:t : type)
+          (TApp expr:t type : type)
+          (IApp expr:t idx : type)
+          (Box idx expr:t : type)
+          (Unbox (var var expr:t) expr:t : type))
+  (scal:t base-val
+          op
+          var:t
+          (λ var expr:t : type)
+          (Tλ var expr:t : type)
+          (Iλ var sort expr:t : type))
+  (val:t scal:t
+         (Arr (scal:t ...) (natural ...) : type)))
+
 (define-judgment-form Remora-explicit
   #:mode (sort-of I I O)
   #:contract (sort-of sort-env idx sort)
@@ -48,20 +70,22 @@
    --- kind-app
    (kind-of sort-env kind-env (type idx) kind)])
 
-(define-judgment-form Remora-explicit
-  #:mode (type-of I I I I O)
-  #:contract (type-of sort-env kind-env type-env expr type)
-  [(type-of (_ ... [var type] _ ...) _ _ var type)
+;;; Type-check an expression in a given environment. One output position is the
+;;; type of the given term. The other is a fully-annotated version of the term.
+(define-judgment-form Remora-annotated
+  #:mode (type-of I I I I O O)
+  #:contract (type-of sort-env kind-env type-env expr type expr:t)
+  [(type-of (_ ... [var type] _ ...) _ _ var type (var : t))
    type-var]
-  [(type-of _ _ _ op (op->type op))
+  [(type-of _ _ _ op (op->type op) op)
    type-op]
-  [(type-of _ _ _ integer (Int {Shp}))
+  [(type-of _ _ _ integer (Int {Shp}) integer)
    type-int]
-  [(type-of _ _ _ boolean (Bool {Shp}))
+  [(type-of _ _ _ boolean (Bool {Shp}) boolean)
    type-bool]
-  [(type-of sort-env kind-env type-env expr_elt (type_elt idx_elt))
+  [(type-of sort-env kind-env type-env expr_elt (type_elt idx_elt) expr:t_elt)
    ;(side-condition ,(printf "Lead element has type ~v\n" (term (type_elt idx_elt))))
-   (type-of sort-env kind-env type-env expr_rest (type_rest idx_rest)) ...
+   (type-of sort-env kind-env type-env expr_rest (type_rest idx_rest) expr:t_rest) ...
    ;; Ensure every type derived from expr_1 ... is equivalent to the type
    ;; derived from expr_0.
    (type-eqv (type_elt idx_elt) (type_rest idx_rest)) ...
@@ -70,97 +94,124 @@
    ;; when building a derivation tree.
    (idx-eqv ,(length (term (expr_elt expr_rest ...)))
             ,(foldr * 1 (term (natural ...))))
+   (where type_result (type_elt (normalize-idx {++ {Shp natural ...} idx_elt})))
    --- type-array
    (type-of sort-env kind-env type-env
-            (Arr (expr_elt expr_rest ...) (natural ...))
-            (type_elt (normalize-idx {++ {Shp natural ...} idx_elt})))]
-  [(kind-of sort-env kind-env type (Shape -> ★))
+            (Arr (expr_elt expr_rest ...) {natural ...})
+            type_result
+            (Arr (expr:t_elt expr:t_rest ...) (natural ...)
+                 : type_result))]
+  ;;;; TODO: update these rules to generate the fully-annotated term
+  [;; Type annotation must be an element type, not just sub-array type (i.e., no
+   ;; "nested empty" arrays).
+   (kind-of sort-env kind-env type (Shape -> ★))
+   (where type_result (type {Shp natural_0 ... 0 natural_1 ...}))
    --- type-empty
    (type-of sort-env kind-env type-env
-            (Arr type (natural_0 ... 0 natural_1 ...))
-            (type {Shp natural_0 ... 0 natural_1 ...}))]
+            (Arr type {natural_0 ... 0 natural_1 ...})
+            type_result
+            (Arr () (natural_0 ... 0 natural_1 ...)
+                 : type_result))]
   [(type-of sort-env kind-env ([var type_in] type-bind ...)
-            expr type_out)
+            expr type_out expr:t)
    (kind-of sort-env kind-env
             type_out ★)
+   (where type_result ((type_in -> type_out) {Shp}))
    --- type-fn
    (type-of sort-env kind-env (type-bind ...)
-            (λ var type_in expr) ((type_in -> type_out) {Shp}))]
+            (λ var type_in expr) type_result
+            (λ var expr:t : type_result))]
   [(type-of sort-env ([var (Shape -> ★)] kind-bind ...) type-env
-            expr type)
+            expr type expr:t)
    (kind-of sort-env (kind-bind ...)
             type ★)
+   (where type_result (∀ var type))
    --- type-Tfn
    (type-of sort-env (kind-bind ...) type-env
-            (Tλ var expr) (∀ var type))]
+            (Tλ var expr) type_result
+            (Tλ var expr:t : type_result))]
   [(type-of ([var sort] sort-bind ...) kind-env type-env
-            expr type)
+            expr type expr:t)
    (kind-of ([var sort] sort-bind ...) kind-env
             type ★)
+   (where type_result (Π var sort type))
    --- type-Ifn
    (type-of (sort-bind ...) kind-env type-env
-            (Iλ var sort expr) (Π var sort type))]
+            (Iλ var sort expr) type_result
+            (Iλ var sort expr:t : type_result))]
   [#;(side-condition ,(printf "Trying type-app\n"))
    (type-of sort-env kind-env type-env
-            expr_fn type_fnposn)
+            expr_fn type_fnposn expr:t_fn)
    #;(side-condition ,(printf "Got type ~v in function position\n"
                             (term type_fnposn)))
    (where (((type_in idx_cell-in)
             -> (type_out idx_cell-out)) idx_ffr)
      type_fnposn)
    (type-of sort-env kind-env type-env
-            expr_arg (type_in idx_arg))
+            expr_arg (type_in idx_arg) expr:t_arg)
    ;; Identify the argument frame (the function position's frame is its
    ;; entire shape).
    (where idx_afr (frame-contribution idx_cell-in idx_arg))
    ;; Compare with function frame to choose principal frame.
    (where idx_pr (larger-frame idx_ffr idx_afr))
+   (where type_result (type_out idx_pr))
    --- type-app
    (type-of sort-env kind-env type-env
             (expr_fn expr_arg)
-            (type_out idx_pr))]
+            type_result
+            (expr:t_fn expr:t_arg : type_result))]
   [(type-of sort-env kind-env type-env
             expr
-            ((∀ var (type_univ idx_result)) idx_frame))
+            ((∀ var (type_univ idx_result)) idx_frame)
+            expr:t)
    (kind-of sort-env kind-env type_arg (Shape -> ★))
    (sort-of sort-env idx_frame Shape)
+   (where type_result
+     (substitute (type_univ (normalize-idx {++ idx_frame idx_result}))
+                 var type_arg))
    -- type-TApp
    (type-of sort-env kind-env type-env
             (TApp expr type_arg)
-            (substitute (type_univ (normalize-idx {++ idx_frame idx_result}))
-                        var type_arg))]
+            type_result
+            (TApp expr:t type_arg : type_result))]
   ;; TODO: Test to make sure this is building things up right.
   [(type-of sort-env kind-env type-env
             expr
-            ((Π var sort (type idx_result)) idx_frame))
+            ((Π var sort (type idx_result)) idx_frame)
+            expr:t)
    (sort-of sort-env idx_arg sort)
    (sort-of sort-env idx_frame Shape)
+   (where type_result
+     (substitute (type (normalize-idx {++ idx_frame idx_result}))
+                 var idx_arg))
    -- type-IApp
    (type-of sort-env kind-env type-env
             (IApp expr idx_arg)
             ;; TODO: Make sure substitute won't accidentally change anything in
             ;; idx_fn (this should be safe if it respects binding properly
             ;; because var cannot be bound in idx_fn).
-            (substitute (type (normalize-idx {++ idx_frame idx_result}))
-                        var idx_arg))]
+            type_result
+            (IApp expr:t idx_arg : type_result))]
   [(sort-of sort-env idx sort)
    (type-of sort-env kind-env type-env
-            expr (substitute type var idx))
+            expr (substitute type var idx) expr:t)
    --- type-box
    (type-of sort-env kind-env type-env
-            (Box idx expr (Σ var sort type)) (Σ var sort type))]
+            (Box idx expr (Σ var sort type)) (Σ var sort type)
+            (Box idx expr : (Σ var sort type)))]
   [(type-of (sort-bind ...) kind-env (type-bind ...)
-            expr_result (Σ var_sum sort type_sum))
+            expr_box (Σ var_sum sort type_sum) expr:t_box)
    (type-of ([var_i sort] sort-bind ...)
             kind-env
             ([var_e (substitute type_sum var_sum var_i)] type-bind ...)
-            expr_result type_result)
+            expr_result type_result expr:t_result)
    (kind-of (sort-bind ...) kind-env
             type_result ★)
    --- type-unbox
    (type-of (sort-bind ...) kind-env (type-bind ...)
             (Unbox (var_i var_e expr_box) expr_result)
-            type_result)])
+            type_result
+            (Unbox (var_i var_e expr:t_box) expr:t_result : type_result))])
 
 (module+ test
   ;; Index application for an array of index-polymorphic functions
@@ -174,7 +225,7 @@
                     (IApp (Arr (iota iota) (2)) 5)
                     (IApp (Arr (iota iota) (2)) 5)]
                    [3])
-              type)
+              type _)
      type)))
   ;; Fully apply an array of iotas (to get an array of boxes)
   (check-not-false
@@ -184,7 +235,7 @@
     (judgment-holds
      (type-of [][][]
               ((IApp (Arr (iota iota) (2)) 3) (Arr (2 3 4) (3)))
-              type)
+              type _)
      type))))
 
 ;;; Stub code for type/idx equivalence judgments -- syntactic equality for now
