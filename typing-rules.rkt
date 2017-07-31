@@ -79,7 +79,7 @@
 (define-judgment-form Remora-annotated
   #:mode (type-of I I I I O O)
   #:contract (type-of sort-env kind-env type-env expr type expr:t)
-  [(type-of (_ ... [var type] _ ...) _ _ var type (var : t))
+  [(type-of _ _ (_ ... [var type] _ ...) var type (var : type))
    type-var]
   [(type-of _ _ _ op (op->type op) op)
    type-op]
@@ -218,6 +218,15 @@
             (Unbox (var_i var_e expr:t_box) expr:t_result : type_result))])
 
 (module+ test
+  ;; Variable type lookup
+  (check-equal?
+   (judgment-holds
+    (type-of () ()
+             ([mean [([Int {Shp 3}] -> [Int {Shp}]) {Shp}]])
+             mean type expr:t)
+    (type expr:t))
+   (list (term ([([Int {Shp 3}] -> [Int {Shp}]) {Shp}]
+                (mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])))))
   ;; Index application for an array of index-polymorphic functions
   (check-not-false
    (redex-match
