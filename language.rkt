@@ -30,6 +30,7 @@
         (Unbox (var var expr) expr))
   (base-val integer boolean)
   ;; Add more primops as they are needed.
+  ;; TODO: how to handle curried primops?
   (op + - * and or not > < =
       length shape reduce iota reshape)
   (val scal

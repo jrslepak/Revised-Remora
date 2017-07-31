@@ -2,7 +2,8 @@
 
 (require redex
          "language.rkt")
-(provide Remora-annotated)
+(provide Remora-annotated
+         type-eqv)
 
 (module+ test
   (require rackunit))
@@ -12,6 +13,7 @@
 ;;; reduction semantics. Using an extended language rather than a completely
 ;;; separate language means primops, base values, and environment structure can
 ;;; be reused as is, and metafunctions can cross between "multiple" languages.
+;;; TODO: add and test new binding form declarations for λ, Tλ, Iλ
 (define-extended-language Remora-annotated Remora-explicit
   (expr:t scal:t
           (Arr (expr:t ...) (natural ...) : type)
