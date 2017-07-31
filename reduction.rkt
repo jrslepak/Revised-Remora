@@ -125,56 +125,35 @@
     (==> a b)]))
 
 (module+ test
-  (check-equal? (apply-reduction-relation
-                 ->R
-                 (term ((Arr [(mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])]
-                             {}
-                             : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])
-                        (Arr [4 3 2 1 0 -1] {2 3} : [Int {Shp 2 3}])
-                        : [Int {Shp 2}])))
-                (list
-                 (term
-                  ((Arr [(mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])
-                         (mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])]
-                        {2}
-                        : [([Int {Shp 3}] -> [Int {Shp}]) {Shp 2}])
-                   (Arr [4 3 2 1 0 -1] {2 3} : [Int {Shp 2 3}])
-                   : [Int {Shp 2}]))))
-  (check-equal? (apply-reduction-relation
-                 ->R
-                 (term (TApp (Arr [(x : (&∀ [t] (&-> [t] t)))
-                                   (y : (&∀ [t] (&-> [t] t)))
-                                   (z : (&∀ [t] (&-> [t] t)))]
-                                  {3}
-                                  : ((∀ t (&-> [t] t)) {Shp 3}))
-                             Int : ((Int -> Int) {Shp 3}))))
-                (list
-                 (term
-                  (Arr [(TApp (x : (&∀ [t] (&-> [t] t))) Int
-                              : (&-> [Int] Int))
-                        (TApp (y : (&∀ [t] (&-> [t] t))) Int
-                              : (&-> [Int] Int))
-                        (TApp (z : (&∀ [t] (&-> [t] t))) Int
-                              : (&-> [Int] Int))]
-                       {3}
-                       : ((Int -> Int) {Shp 3})))))
-
-  (check-equal? (apply-reduction-relation
-                 ->R
-                 (term ((Arr [(mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])
-                              (mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])]
-                             {2}
-                             : [([Int {Shp 3}] -> [Int {Shp}]) {Shp 2}])
-                        (Arr [4 3 2 1 0 -1] {2 3} : [Int {Shp 2 3}])
-                        : [Int {Shp 2}])))
-                (list
-                 (term
-                  (Arr [((mean : (((Int (Shp 3)) -> (Int (Shp))) (Shp)))
-                         (Arr (4 3 2) (3) : (Int (Shp 3))) : (Int (Shp)))
-                        ((mean : (((Int (Shp 3)) -> (Int (Shp))) (Shp)))
-                         (Arr (1 0 -1) (3) : (Int (Shp 3))) : (Int (Shp)))]
-                       {2}
-                       : [Int {Shp 2}])))))
+  ;;; Specify the expected inputs and outputs in non-elaborated form
+  (define (check-under-elaboration f)
+    (λ (in #:env [env '(() () ())] outs)
+      (define s (first env)) (define k (second env)) (define t (third env))
+      (define elaborated-input (term (elaborate/env ,s ,k ,t ,in)))
+      (define results (f elaborated-input))
+      (define unannotated-results (map (λ (t) (term (unelaborate ,t))) results))
+      (check-equal? unannotated-results outs)))
+  (define check-step
+    (check-under-elaboration
+     (λ (input) (apply-reduction-relation ->R input))))
+  (define check-step*
+    (check-under-elaboration
+     (λ (input) (apply-reduction-relation* ->R input))))
+  ;;; Compatible but non-equal frame shapes, should take a lift step
+  (check-step (term ((Arr [mean] {}) (Arr [4 3 2 1 0 -1] {2 3})))
+              #:env (term (() () ((mean [([Int {Shp 3}] -> [Int {Shp}]) {Shp}]))))
+              (list (term ((Arr [mean mean] {2}) (Arr [4 3 2 1 0 -1] {2 3})))))
+  ;;; Equal frame shapes, should take a map step
+  (check-step (term ((Arr [mean mean] {2}) (Arr [4 3 2 1 0 -1] {2 3})))
+              #:env (term (() () ((mean [([Int {Shp 3}] -> [Int {Shp}]) {Shp}]))))
+              (list (term (Arr [(mean (Arr [4 3 2] {3}))
+                                (mean (Arr [1 0 -1] {3}))] {2}))))
+  ;;; Make sure type application maps as expected
+  (check-step (term (TApp (Arr [x y z] {3}) Int))
+              #:env (term (() () ((x (&∀ [t] (&-> [t] t)))
+                                  (y (&∀ [t] (&-> [t] t)))
+                                  (z (&∀ [t] (&-> [t] t))))))
+              (list (term (Arr [(TApp x Int) (TApp y Int) (TApp z Int)] {3})))))
 
 (define-metafunction Remora-exec
   split : [any ...] natural -> [[any ...] ...]

@@ -3,7 +3,8 @@
 (require redex
          "language.rkt")
 (provide Remora-annotated
-         type-eqv)
+         sort-of kind-of type-of type-eqv idx->*
+         elaborate elaborate/env unelaborate)
 
 (module+ test
   (require rackunit))
@@ -280,6 +281,47 @@
    ---
    (idx->* {++ idx_old ...}
            {++ idx_new ...})])
+
+;;; Metafunction wrappers for type-of judgment which produces the fully annotated
+;;; version of a closed term (elaborate) or possibly open terms (elaborate/env)
+(define-metafunction Remora-annotated
+  elaborate/env : sort-env kind-env type-env expr -> expr:t
+  [(elaborate/env sort-env kind-env type-env expr)
+   expr:t_out
+   (where (expr:t_out _ ...)
+     ,(judgment-holds
+       (type-of sort-env kind-env type-env expr _ expr:t)
+       expr:t))])
+(define-metafunction Remora-annotated
+  elaborate : expr -> expr:t
+  [(elaborate expr) (elaborate/env () () () expr)])
+
+;;; Convert fully annotated term to minimally annotated form
+(define-metafunction Remora-annotated
+  unelaborate : expr:t -> expr
+  [(unelaborate base-val) base-val]
+  [(unelaborate op) op]
+  [(unelaborate (var : type)) var]
+  [(unelaborate (λ var expr:t : ((type_in -> _) _)))
+   (λ var type_in (unelaborate expr:t))]
+  [(unelaborate (Tλ var expr:t : _))
+   (Tλ var (unelaborate expr:t))]
+  [(unelaborate (Iλ var sort expr:t : _))
+   (λ var sort (unelaborate expr:t))]
+  [(unelaborate (Arr [expr:t ...] {natural_0 ... 0 natural_1} : [type _]))
+   (Arr type {natural_0 ... 0 natural_1})]
+  [(unelaborate (Arr [expr:t ...] {natural ...} : type))
+   (Arr [(unelaborate expr:t) ...] {natural ...})]
+  [(unelaborate (expr:t_f expr:t_a : type))
+   ((unelaborate expr:t_f) (unelaborate expr:t_a))]
+  [(unelaborate (TApp expr:t type : _))
+   (TApp (unelaborate expr:t) type)]
+  [(unelaborate (IApp expr:t idx : _))
+   (IApp (unelaborate expr:t) idx)]
+  [(unelaborate (Box idx expr:t : type))
+   (Box idx expr:t type)]
+  [(unelaborate (Unbox (var_i var_e expr:t_box) expr:t_body : type))
+   (Unbox (var_i var_e (unelaborate expr:t_box)) (unelaborate expr:t_body))])
 
 ;;; Pass expected shape and actual shape. This metafunction assumes the indices
 ;;; passed in are well-formed Shapes. Returns the frame shape if it exists.
