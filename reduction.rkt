@@ -25,6 +25,20 @@
    ;; - (op val)
    ;; - ((λ ___) val)
    ;; -- subcase: lift
+   ;; --- lifting with a scalar in function position
+   [==> (scal:t expr:t : type_app)
+        ((Arr [replicate (scal:t) (nprod {natural_frm0 natural_frm1 ...})]
+              {natural_frm0 natural_frm1 ...}
+              : [([type_in {Shp natural_shp-in ...}] -> type_out)
+                 {Shp natural_frm0 natural_frm1 ...}])
+         expr:t
+         : type_app)
+        (where [([type_in {Shp natural_shp-in ...}] -> type_out) {Shp}]
+          (extract-type scal:t))
+        (where [type_arg {Shp natural_frm0 natural_frm1 ... natural_shp-in ...}]
+          (extract-type expr:t))
+        liftSc]
+   ;; --- lifting with an array in function position
    [==> ((Arr [scal:t_fn ...] {natural_f-frm ...}
               : [([type_in {Shp natural_in ...}] -> type_out) idx_fn])
          (Arr [scal:t_arg ...] {natural_a-frm ... natural_in ...} : [type_in idx_arg])
@@ -87,8 +101,8 @@
    ;; -- subcase: β
    [==> ((λ var expr:t : ((type_in -> type_out) {Shp})) val:t : type_app)
         (substitute expr:t var val:t)
-        (where (_ : type_arg) val:t)
-        (side-condition (judgment-holds (type-eqv type_in type_out)))
+        (where type_arg (extract-type val:t))
+        (side-condition (judgment-holds (type-eqv type_in type_arg)))
         β]
    ;; - (TApp (Tλ ___) type)
    [==> (TApp (Tλ var expr:t : type_tlam) type_arg : type_tapp)
