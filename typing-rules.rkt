@@ -31,7 +31,12 @@
           (Iλ var sort expr:t : type))
   (val:t scal:t
          (Arr (scal:t ...) (natural ...) : type))
-  (var:t (var : type)))
+  (var:t (var : type))
+  #:binding-forms
+  (λ var expr:t #:refers-to var : type)
+  (Tλ var expr:t #:refers-to var : type)
+  (Iλ var sort expr:t #:refers-to var : type)
+  (Unbox (var_i var_e expr:t) expr:t #:refers-to (shadow var_i var_e) : type))
 
 (define-judgment-form Remora-explicit
   #:mode (sort-of I I O)
