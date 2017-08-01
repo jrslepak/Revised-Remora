@@ -146,13 +146,25 @@
       (define elaborated-input (term (elaborate/env ,s ,k ,t ,in)))
       (define results (f elaborated-input))
       (define unannotated-results (map (λ (t) (term (unelaborate ,t))) results))
-      (check-equal? unannotated-results outs)))
+      (check (λ (got wanted) (alpha-equivalent? Remora-exec got wanted))
+             unannotated-results outs)))
   (define check-step
     (check-under-elaboration
      (λ (input) (apply-reduction-relation ->R input))))
   (define check-step*
     (check-under-elaboration
      (λ (input) (apply-reduction-relation* ->R input))))
+  ;;; Lift a scalar lambda
+  (check-step (term ((λ x [Int {Shp}] x) (Arr [1 2 3 4] {2 2})))
+              (list (term ((Arr [(λ x [Int {Shp}] x)
+                                 (λ x [Int {Shp}] x)
+                                 (λ x [Int {Shp}] x)
+                                 (λ x [Int {Shp}] x)]
+                                {2 2})
+                           (Arr [1 2 3 4] {2 2})))))
+  ;;; Lift a scalar primop
+  (check-step (term (+ (Arr [1 2 3 4] {2 2})))
+              (list (term ((Arr [+ + + +] {2 2}) (Arr [1 2 3 4] {2 2})))))
   ;;; Compatible but non-equal frame shapes, should take a lift step
   (check-step (term ((Arr [mean] {}) (Arr [4 3 2 1 0 -1] {2 3})))
               #:env (term (() () ((mean [([Int {Shp 3}] -> [Int {Shp}]) {Shp}]))))
@@ -168,6 +180,16 @@
                                   (y (&∀ [t] (&-> [t] t)))
                                   (z (&∀ [t] (&-> [t] t))))))
               (list (term (Arr [(TApp x Int) (TApp y Int) (TApp z Int)] {3})))))
+
+(define-metafunction Remora-exec
+  extract-type : expr:t -> type
+  [(extract-type (_ ... : type)) type]
+  [(extract-type op)
+   type
+   (where (type) ,(judgment-holds (type-of () () () op type _) type))]
+  [(extract-type base-val)
+   type
+   (where (type) ,(judgment-holds (type-of () () () base-val type _) type))])
 
 (define-metafunction Remora-exec
   split : [any ...] natural -> [[any ...] ...]
