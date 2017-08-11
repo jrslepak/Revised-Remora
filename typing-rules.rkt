@@ -3,11 +3,14 @@
 (require redex
          "language.rkt")
 (provide Remora-annotated
-         sort-of kind-of type-of type-eqv idx->*
+         sort-of kind-of type-of/atom type-of/expr type-eqv idx->*
          elaborate elaborate/env unelaborate)
 
 (module+ test
-  (require rackunit))
+  (require rackunit)
+  (define-syntax-rule (check-alpha-equivalent? x y)
+    (check (λ (l r) (alpha-equivalent? Remora-annotated l r))
+           x y)))
 
 ;;; ___:t versions of Remora abstract syntax include a type annotation on each
 ;;; expression, so that the type information is readily available for the
@@ -16,27 +19,36 @@
 ;;; be reused as is, and metafunctions can cross between "multiple" languages.
 ;;; TODO: add and test new binding form declarations for λ, Tλ, Iλ
 (define-extended-language Remora-annotated Remora-explicit
-  (expr:t scal:t
-          (Arr (expr:t ...) (natural ...) : type)
-          (expr:t expr:t : type)
-          (TApp expr:t type : type)
-          (IApp expr:t idx : type)
-          (Box idx expr:t : type)
-          (Unbox (var var expr:t) expr:t : type))
-  (scal:t base-val
+  (atom:t base-val
           op
+          (λ [var ...] expr:t : type)
+          (tλ [var ...] expr:t : type)
+          (iλ [var ...] expr:t : type)
+          (box idx ... expr:t : type))
+  (atval:t base-val
+           op
+           (λ [var ...] expr:t : type)
+           (tλ [var ...] expr:t : type)
+           (iλ [var ...] expr:t : type)
+           (box idx ... val:t : type))
+  (expr:t atom:t
           var:t
-          (λ var expr:t : type)
-          (Tλ var expr:t : type)
-          (Iλ var sort expr:t : type))
-  (val:t scal:t
-         (Arr (scal:t ...) (natural ...) : type))
+          (array {natural ...} [atom:t ...] : type)
+          (frame {natural ...} [expr:t ...] : type)
+          (expr:t expr:t ... : type)
+          (t-app expr:t type ... : type)
+          (i-app expr:t idx ... : type)
+          (unbox (var var expr:t) expr:t : type))
+  (val:t var:t
+         (array (natural ...) (scal:t ...) : type))
+  (AE:t atom:t expr:t)
   (var:t (var : type))
   #:binding-forms
-  (λ var expr:t #:refers-to var : type)
-  (Tλ var expr:t #:refers-to var : type)
-  (Iλ var sort expr:t #:refers-to var : type)
-  (Unbox (var_i var_e expr:t) expr:t #:refers-to (shadow var_i var_e) : type))
+  (λ [var ...] expr:t #:refers-to (shadow var ...) : type)
+  (tλ [var ...] expr:t #:refers-to (shadow var ...) : type)
+  (iλ [var ...] expr:t #:refers-to (shadow var ...) : type)
+  (Unbox (var_i ... var_e expr:t) expr:t #:refers-to (shadow var_i ... var_e) : type))
+
 
 (define-judgment-form Remora-explicit
   #:mode (sort-of I I O)
@@ -60,202 +72,473 @@
   #:contract (kind-of sort-env kind-env type kind)
   [(kind-of _ (_ ... [var kind] _ ...) var kind)
    kind-var]
-  [(kind-of _ _ base-type (Shape -> ★))
+  [(kind-of _ _ base-type Atom)
    kind-base]
-  [(kind-of sort-env kind-env type_in ★)
-   (kind-of sort-env kind-env type_out ★)
+  [(kind-of sort-env kind-env type_in Array)
+   (kind-of sort-env kind-env type_out Array)
    --- kind-fn
-   (kind-of sort-env kind-env (type_in -> type_out) (Shape -> ★))]
-  [(kind-of sort-env ([var (Shape -> ★)] kind-bind ...) type (Shape -> ★))
+   (kind-of sort-env kind-env (type_in -> type_out) Atom)]
+  [(kind-of sort-env (update kind-env [(var kind) ...]) type Array)
    --- kind-all
-   (kind-of sort-env (kind-bind ...) (∀ var type) (Shape -> ★))]
-  [(kind-of ([var sort] sort-bind ...) kind-env type (Shape -> ★))
+   (kind-of sort-env kind-env (∀ [(var kind) ...] type) Atom)]
+  [(kind-of (update sort-env [(var sort) ...]) kind-env type Array)
    --- kind-pi
-   (kind-of (sort-bind ...) kind-env (Π var sort type) (Shape -> ★))]
-  [(kind-of ([var sort] sort-bind ...) kind-env type (Shape -> ★))
+   (kind-of sort-env kind-env (Π [(var sort) ...] type) Atom)]
+  [(kind-of (update sort-env [(var sort) ...]) kind-env type Array)
    --- kind-sigma
-   (kind-of (sort-bind ...) kind-env (Σ var sort type) (Shape -> ★))]
-  [(kind-of sort-env kind-env type (sort -> kind))
-   (sort-of sort-env idx sort)
-   --- kind-app
-   (kind-of sort-env kind-env (type idx) kind)])
+   (kind-of sort-env kind-env (Σ [(var sort) ...] type) Atom)]
+  [(kind-of sort-env kind-env type Atom)
+   (sort-of sort-env idx Shape)
+   --- kind-array
+   (kind-of sort-env kind-env (Array type idx) Array)])
 
-;;; Type-check an expression in a given environment. One output position is the
+
+;;; Type-check an atom in a given environment. One output position is the
 ;;; type of the given term. The other is a fully-annotated version of the term.
 (define-judgment-form Remora-annotated
-  #:mode (type-of I I I I O O)
-  #:contract (type-of sort-env kind-env type-env expr type expr:t)
-  [(type-of _ _ (_ ... [var type] _ ...) var type (var : type))
-   type-var]
-  [(type-of _ _ _ op (op->type op) op)
+  #:mode (type-of/atom I I I I O O)
+  #:contract (type-of/atom sort-env kind-env type-env atom type atom:t)
+  [(type-of/atom _ _ _ op (op->type op) op)
    type-op]
-  [(type-of _ _ _ integer (Int {Shp}) integer)
+  [(type-of/atom _ _ _ integer Int integer)
    type-int]
-  [(type-of _ _ _ boolean (Bool {Shp}) boolean)
+  [(type-of/atom _ _ _ boolean Bool boolean)
    type-bool]
-  [(type-of sort-env kind-env type-env expr_elt (type_elt idx_elt) expr:t_elt)
-   ;(side-condition ,(printf "Lead element has type ~v\n" (term (type_elt idx_elt))))
-   (type-of sort-env kind-env type-env expr_rest (type_rest idx_rest) expr:t_rest) ...
-   ;; Ensure every type derived from expr_1 ... is equivalent to the type
-   ;; derived from expr_0.
-   (type-eqv (type_elt idx_elt) (type_rest idx_rest)) ...
+  [(type-of/expr sort-env kind-env
+                 (update type-env [(var type_in) ...])
+                 expr type_out expr:t)
+   ;; Function arguments must be Arrays
+   (kind-of sort-env kind-env type_in Array) ...
+   --- type-fn
+   (type-of/atom sort-env kind-env type-env
+                 (λ [(var type_in) ...] expr)
+                 (-> [type_in ...] type_out)
+                 (λ [var ...] expr:t : (-> [type_in ...] type_out)))]
+  [(type-of/expr sort-env (update kind-env [(var kind) ...]) type-env
+                 expr type expr:t)
+   --- type-tfn
+   (type-of/atom sort-env kind-env type-env
+                 (tλ [(var kind) ...] expr)
+                 (∀ [(var kind) ...] type)
+                 (tλ [var ...] expr:t
+                     : (∀ [(var kind) ...] type)))]
+  [(type-of/expr (update sort-env [(var sort) ...]) kind-env type-env
+                 expr type expr:t)
+   --- type-ifn
+   (type-of/atom sort-env kind-env type-env
+                 (iλ [(var sort) ...] expr)
+                 (Π [(var sort) ...] type)
+                 (iλ [var ...] expr:t
+                     : (Π [(var sort) ...] type)))]
+  [(sort-of sort-env idx sort) ...
+   (type-of/expr sort-env kind-env type-env
+                 expr type_found expr:t)
+   (type-eqv type_found (subst* type [(var idx) ...]))
+   --- type-box
+   (type-of/atom sort-env kind-env type-env
+                 (box idx ... expr (Σ [(var sort) ...] type))
+                 (Σ [(var sort) ...] type)
+                 (box idx ... expr:t : (Σ [(var sort) ...] type)))])
+(module+ test
+  ;; Should not allow use of a free type variable
+  (check-false
+   (judgment-holds
+    (type-of/atom [] [] [] (λ [(x (Array A {Shp}))] x) type atom:t)))
+  ;; Should not allow use of ill-kinded type
+  (check-false
+   (judgment-holds
+    (type-of/atom [] [(A Array)] []
+                  (λ [(x (Array A {Shp}))] x) type atom:t)))
+  ;; Type var with Array kind is permissible argument type
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [(A Array)] []
+                  (λ [(x A)] x) type atom:t)
+    (type atom:t))
+   (list (term ((-> [A] A) (λ [x] (x : A) : (-> [A] A))))))
+  ;; Can build Array-kinded arg type from Atom-kinded type
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [(A Atom)] []
+                  (λ [(x (Array A {Shp}))] x) type atom:t)
+    (type atom:t))
+   (list (term ((-> [(Array A {Shp})] (Array A {Shp}))
+                (λ [x] (x : (Array A {Shp}))
+                  : (-> [(Array A {Shp})] (Array A {Shp})))))))
+  ;; As previous case, but put the Atom type into the environment with a tλ
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (tλ [(A Atom)] (array {} [(λ [(x (Array A {Shp}))] x)]))
+                  type atom:t)
+    (type atom:t))
+   (list (term ((∀ [(A Atom)]
+                   (Array (-> [(Array A {Shp})] (Array A {Shp})) {Shp}))
+                (tλ [A] (array {} [(λ [x] (x : (Array A {Shp}))
+                                     : (-> [(Array A {Shp})] (Array A {Shp})))]
+                               : (Array (-> [(Array A {Shp})] (Array A {Shp}))
+                                        {Shp}))
+                    : (∀ [(A Atom)]
+                         (Array (-> [(Array A {Shp})] (Array A {Shp}))
+                                {Shp})))))))
+  ;; Make sure iλ puts variables in the environment properly
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (iλ [(i Shape)] (array {} [(λ [(x (Array Int i))] x)]))
+                  type atom:t)
+    (type atom:t))
+   (list (term ((Π [(i Shape)] (Array (-> [(Array Int i)] (Array Int i)) {Shp}))
+                (iλ [i] (array {}
+                               [(λ [x] (x : (Array Int i))
+                                  : (-> [(Array Int i)] (Array Int i)))]
+                               : (Array (-> [(Array Int i)] (Array Int i))
+                                        {Shp}))
+                    : (Π [(i Shape)] (Array (-> [(Array Int i)] (Array Int i))
+                                            {Shp})))))))
+  ;; With the wrong sort for the index argument, this should be ill-typed
+  (check-false
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (iλ [(i Dim)] (array {} [(λ [(x (Array Int i))] x)]))
+                  type atom:t)))
+  ;; Box typed using its actual size
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (box 2 (array {2} [2 5]) (Σ [(l Dim)] (Array Int {Shp l})))
+                  type atom:t)
+    (type atom:t))
+   (list (term ((Σ [(l Dim)] (Array Int {Shp l}))
+                (box 2 (array {2} [2 5] : (Array Int {Shp 2}))
+                     : (Σ [(l Dim)] (Array Int {Shp l})))))))
+  ;; Box typed without using its size
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (box 15 (array {2} [2 5]) (Σ [(l Dim)] (Array Int {Shp 2})))
+                  type atom:t)
+    (type atom:t))
+   (list (term ((Σ [(l Dim)] (Array Int {Shp 2}))
+                (box 15 (array {2} [2 5] : (Array Int {Shp 2}))
+                     : (Σ [(l Dim)] (Array Int {Shp 2})))))))
+  ;; Box (mis-)typed using the wrong size
+  (check-false
+   (judgment-holds
+    (type-of/atom [] [] []
+                  (box 3 (array {2} [2 5]) (Σ [(l Dim)] (Array Int {Shp l})))
+                  _ _))))
+
+(define-judgment-form Remora-annotated
+  #:mode (type-of/expr I I I I O O)
+  #:contract (type-of/expr sort-env kind-env type-env expr type expr:t)
+  [(type-of/expr _ _ (_ ... [var type] _ ...) var type (var : type))
+   type-var]
+  [(type-of/atom sort-env kind-env type-env atom type atom:t)
+   ;; Ensure every type derived from remaining atoms is equivalent to the type
+   ;; derived from the first one.
+   (type-of/atom sort-env kind-env type-env atom_rest type_rest atom:t_rest)
+   ...
+   (type-eqv type type_rest)
+   ...
    ;; Ensure number of elements fits with specified shape.
    ;; Phrasing this as an index equality check (on naturals) makes it appear
    ;; when building a derivation tree.
-   (idx-eqv ,(length (term (expr_elt expr_rest ...)))
-            ,(foldr * 1 (term (natural ...))))
-   (where type_result (type_elt (normalize-idx {++ {Shp natural ...} idx_elt})))
+   (idx-eqv ,(length (term [atom atom_rest ...]))
+            ,(foldr * 1 (term {natural ...})))
    --- type-array
-   (type-of sort-env kind-env type-env
-            (Arr (expr_elt expr_rest ...) {natural ...})
-            type_result
-            (Arr (expr:t_elt expr:t_rest ...) (natural ...)
-                 : type_result))]
-  ;;;; TODO: update these rules to generate the fully-annotated term
-  [;; Type annotation must be an element type, not just sub-array type (i.e., no
-   ;; "nested empty" arrays).
-   (kind-of sort-env kind-env type (Shape -> ★))
-   (where type_result (type {Shp natural_0 ... 0 natural_1 ...}))
-   --- type-empty
-   (type-of sort-env kind-env type-env
-            (Arr type {natural_0 ... 0 natural_1 ...})
-            type_result
-            (Arr () (natural_0 ... 0 natural_1 ...)
-                 : type_result))]
-  [(type-of sort-env kind-env ([var type_in] type-bind ...)
-            expr type_out expr:t)
-   (kind-of sort-env kind-env
-            type_out ★)
-   (where type_result ((type_in -> type_out) {Shp}))
-   --- type-fn
-   (type-of sort-env kind-env (type-bind ...)
-            (λ var type_in expr) type_result
-            (λ var expr:t : type_result))]
-  [(type-of sort-env ([var (Shape -> ★)] kind-bind ...) type-env
-            expr type expr:t)
-   (kind-of sort-env (kind-bind ...)
-            type ★)
-   (where type_result (∀ var type))
-   --- type-Tfn
-   (type-of sort-env (kind-bind ...) type-env
-            (Tλ var expr) type_result
-            (Tλ var expr:t : type_result))]
-  [(type-of ([var sort] sort-bind ...) kind-env type-env
-            expr type expr:t)
-   (kind-of ([var sort] sort-bind ...) kind-env
-            type ★)
-   (where type_result (Π var sort type))
-   --- type-Ifn
-   (type-of (sort-bind ...) kind-env type-env
-            (Iλ var sort expr) type_result
-            (Iλ var sort expr:t : type_result))]
-  [#;(side-condition ,(printf "Trying type-app\n"))
-   (type-of sort-env kind-env type-env
-            expr_fn type_fnposn expr:t_fn)
-   #;(side-condition ,(printf "Got type ~v in function position\n"
-                            (term type_fnposn)))
-   (where (((type_in idx_cell-in)
-            -> (type_out idx_cell-out)) idx_ffr)
-     type_fnposn)
-   (type-of sort-env kind-env type-env
-            expr_arg (type_in idx_arg) expr:t_arg)
-   ;; Identify the argument frame (the function position's frame is its
-   ;; entire shape).
-   (where idx_afr (frame-contribution idx_cell-in idx_arg))
-   ;; Compare with function frame to choose principal frame.
-   (where idx_pr (larger-frame idx_ffr idx_afr))
-   (where type_result (type_out idx_pr))
+   (type-of/expr sort-env kind-env type-env
+                 (array {natural ...} [atom atom_rest ...])
+                 (Array type {Shp natural ...})
+                 (array {natural ...} [atom:t atom:t_rest ...]
+                        : (Array type {Shp natural ...})))]
+  [(type-of/expr sort-env kind-env type-env
+                 expr (Array type_cell idx_cell) expr:t)
+   (type-of/expr sort-env kind-env type-env
+                 expr_rest type_rest expr:t_rest)
+   ...
+   (type-eqv (Array type_cell idx_cell) type_rest)
+   ...
+   (idx-eqv ,(length (term (expr expr_rest ...)))
+            ,(foldr * 1 (term (natural ...))))
+   --- type-frame
+   (type-of/expr sort-env kind-env type-env
+                 (frame {natural ...} [expr expr_rest ...])
+                 (Array type_cell {++ {Shp natural ...} idx_cell})
+                 (frame {natural ...} [expr:t expr:t_rest ...]
+                        : (Array type_cell {++ {Shp natural ...} idx_cell})))]
+  [(kind-of sort-env kind-env type Atom)
+   (where {_ ... 0 _ ...} {natural ...})
+   --- type-emptyA
+   (type-of/expr sort-env kind-env type-env
+                 (array {natural ...} type)
+                 (Array type {Shp natural ...})
+                 (array {natural ...} []
+                        : (Array type {Shp natural ...})))]
+  [(kind-of sort-env kind-env type Atom)
+   (where {_ ... 0 _ ...} {natural ...})
+   --- type-emptyF
+   (type-of/expr sort-env kind-env type-env
+                 (frame {natural ...} (Array type idx))
+                 (Array type {Shp natural ...})
+                 (frame {natural ...} []
+                        : (Array type {++ {Shp natural ...} idx})))]
+  [(type-of/expr sort-env kind-env type-env
+                 expr_fn
+                 ;; Identify the input and output cell types.
+                 ;; The function's frame (ffr) is its entire shape.
+                 (Array (-> [(Array type_in idx_in) ...] (Array type_out idx_out))
+                        idx_ffr)
+                 expr:t_fn)
+   ;; Find the actual arguments' types.
+   (type-of/expr sort-env kind-env type-env
+                 expr_arg
+                 type_actual
+                 expr:t_arg)
+   ...
+   (where ((Array type_arg idx_arg) ...) (type_actual ...))
+   (type-eqv type_in type_arg) ...
+   ;; Identify each argument's frame.
+   (where (idx_afr ...) ((frame-contribution idx_in idx_arg) ...))
+   ;; The largest frame is the principal frame.
+   (where idx_pfr (largest-frame [idx_ffr idx_afr ...]))
    --- type-app
-   (type-of sort-env kind-env type-env
-            (expr_fn expr_arg)
-            type_result
-            (expr:t_fn expr:t_arg : type_result))]
-  [(type-of sort-env kind-env type-env
-            expr
-            ((∀ var (type_univ idx_result)) idx_frame)
-            expr:t)
-   (kind-of sort-env kind-env type_arg (Shape -> ★))
-   (sort-of sort-env idx_frame Shape)
-   (where type_result
-     (substitute (type_univ (normalize-idx {++ idx_frame idx_result}))
-                 var type_arg))
-   -- type-TApp
-   (type-of sort-env kind-env type-env
-            (TApp expr type_arg)
-            type_result
-            (TApp expr:t type_arg : type_result))]
-  ;; TODO: Test to make sure this is building things up right.
-  [(type-of sort-env kind-env type-env
-            expr
-            ((Π var sort (type idx_result)) idx_frame)
-            expr:t)
-   (sort-of sort-env idx_arg sort)
-   (sort-of sort-env idx_frame Shape)
-   (where type_result
-     (substitute (type (normalize-idx {++ idx_frame idx_result}))
-                 var idx_arg))
-   -- type-IApp
-   (type-of sort-env kind-env type-env
-            (IApp expr idx_arg)
-            ;; TODO: Make sure substitute won't accidentally change anything in
-            ;; idx_fn (this should be safe if it respects binding properly
-            ;; because var cannot be bound in idx_fn).
-            type_result
-            (IApp expr:t idx_arg : type_result))]
-  [(sort-of sort-env idx sort)
-   (type-of sort-env kind-env type-env
-            expr (substitute type var idx) expr:t)
-   --- type-box
-   (type-of sort-env kind-env type-env
-            (Box idx expr (Σ var sort type)) (Σ var sort type)
-            (Box idx expr : (Σ var sort type)))]
-  [(type-of (sort-bind ...) kind-env (type-bind ...)
-            expr_box (Σ var_sum sort type_sum) expr:t_box)
-   (type-of ([var_i sort] sort-bind ...)
-            kind-env
-            ([var_e (substitute type_sum var_sum var_i)] type-bind ...)
-            expr_result type_result expr:t_result)
-   (kind-of (sort-bind ...) kind-env
-            type_result ★)
+   (type-of/expr sort-env kind-env type-env
+                 (expr_fn expr_arg ...)
+                 (Array type_out (normalize-idx {++ idx_pfr idx_out}))
+                 (expr:t_fn
+                  expr:t_arg ...
+                  : (Array type_out (normalize-idx {++ idx_pfr idx_out}))))]
+  [(type-of/expr sort-env kind-env type-env
+                 expr
+                 (Array (∀ [(var kind) ...] (Array type_univ idx_univ))
+                        idx_frame)
+                 expr:t)
+   (kind-of sort-env kind-env type_arg kind) ...
+   (where type_subbed
+     (subst* (Array type_univ (normalize-idx {++ idx_frame idx_univ}))
+             [(var type_arg) ...]))
+   --- type-tapp
+   (type-of/expr sort-env kind-env type-env
+                 (t-app expr type_arg ...)
+                 type_subbed
+                 (t-app expr:t type_arg ... : type_subbed))]
+  [(type-of/expr sort-env kind-env type-env
+                 expr
+                 (Array (Π [(var sort) ...] (Array type_pi idx_pi))
+                        idx_frame)
+                 expr:t)
+   (sort-of sort-env idx_arg sort) ...
+   (where type_subbed
+     (subst* (Array type_pi (normalize-idx {++ idx_frame idx_pi}))
+             [(var idx_arg) ...]))
+   --- type-iapp
+   (type-of/expr sort-env kind-env type-env
+                 (i-app expr idx_arg ...)
+                 type_subbed
+                 (i-app expr:t idx_arg ... : type_subbed))]
+  [#;(side-condition ,(printf "attempting type-unbox\n"))
+   (type-of/expr sort-env kind-env type-env
+                 expr_box
+                 type_box ;(Σ [(var_sum sort) ...] type_contents)
+                 expr:t_box)
+   #;(side-condition ,(printf "box position has type ~v\n"
+                            (term type_box)))
+   (where (Array (Σ [(var_sum sort) ...] type_contents) {Shp}) type_box)
+   (type-of/expr (update sort-env [(var_i sort) ...])
+                 kind-env
+                 (update type-env [(var_e (subst* type_contents
+                                                  [(var_sum var_i) ...]))])
+                 expr_body
+                 type_body
+                 expr:t_body)
+   (kind-of sort-env kind-env type_body Array)
    --- type-unbox
-   (type-of (sort-bind ...) kind-env (type-bind ...)
-            (Unbox (var_i var_e expr_box) expr_result)
-            type_result
-            (Unbox (var_i var_e expr:t_box) expr:t_result : type_result))])
+   (type-of/expr sort-env kind-env type-env
+                 (unbox [var_i ... var_e expr_box] expr_body)
+                 type_body
+                 (unbox [var_i ... var_e expr:t_box]
+                   expr:t_body
+                   : type_body))])
 
 (module+ test
   ;; Variable type lookup
-  (check-equal?
+  (check-alpha-equivalent?
    (judgment-holds
-    (type-of () ()
-             ([mean [([Int {Shp 3}] -> [Int {Shp}]) {Shp}]])
-             mean type expr:t)
+    (type-of/expr [] []
+                  [(mean (Array (-> [(Array Int {Shp 3})] (Array Int {Shp})) {Shp}))]
+                  mean type expr:t)
     (type expr:t))
-   (list (term ([([Int {Shp 3}] -> [Int {Shp}]) {Shp}]
-                (mean : [([Int {Shp 3}] -> [Int {Shp}]) {Shp}])))))
-  ;; Index application for an array of index-polymorphic functions
-  (check-not-false
-   (redex-match
-    Remora-explicit
-    [(((Int {Shp 5}) -> ((Σ var Shape (Int var)) {Shp})) {Shp 3 2})]
-    (judgment-holds
-     (type-of [][][]
-              (Arr [(IApp (Arr (iota iota) (2)) 5)
-                    (IApp (Arr (iota iota) (2)) 5)
-                    (IApp (Arr (iota iota) (2)) 5)]
-                   [3])
-              type _)
-     type)))
+   (list
+    (term ((Array (-> [(Array Int {Shp 3})] (Array Int {Shp})) {Shp})
+           (mean : (Array (-> [(Array Int {Shp 3})]
+                              (Array Int {Shp})) {Shp}))))))
+  ;; Index application for scalar
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr [] [] []
+                  (i-app (array {} [iota]) 5)
+                  type expr:t)
+    (type expr:t))
+   (list (term ((Array (-> [(Array Int {Shp 5})]
+                           (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
+                       {Shp})
+                (i-app (array {} [iota]
+                              : (Array (Π [(r Dim)]
+                                          (Array (-> [(Array Int {Shp r})]
+                                                     (Array (Σ [(s Shape)]
+                                                               (Array Int s))
+                                                            {Shp}))
+                                                 {Shp}))
+                                       {Shp}))
+                       5
+                       : (Array
+                          (-> [(Array Int {Shp 5})]
+                              (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
+                          {Shp}))))))
+  ;; Index application for vector
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr [] [] []
+                  (i-app (array {3} [iota iota iota]) 5)
+                  type expr:t)
+    (type expr:t))
+   (list (term ((Array (-> [(Array Int {Shp 5})]
+                           (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
+                       {Shp 3})
+                (i-app (array {3} [iota iota iota]
+                              : (Array (Π [(r Dim)]
+                                          (Array (-> [(Array Int {Shp r})]
+                                                     (Array (Σ [(s Shape)]
+                                                               (Array Int s))
+                                                            {Shp}))
+                                                 {Shp}))
+                                       {Shp 3}))
+                       5
+                       : (Array
+                          (-> [(Array Int {Shp 5})]
+                              (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
+                          {Shp 3}))))))
   ;; Fully apply an array of iotas (to get an array of boxes)
-  (check-not-false
-   (redex-match
-    Remora-explicit
-    (((Σ var_s Shape (Int var_s)) (Shp 2)))
-    (judgment-holds
-     (type-of [][][]
-              ((IApp (Arr (iota iota) (2)) 3) (Arr (2 3 4) (3)))
-              type _)
-     type))))
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr [] [] []
+                  ((i-app (array {3} [iota iota iota]) 2)
+                   (array {3 2} [1 2 3 4 5 6]))
+                  type expr:t)
+    (type expr:t))
+   (list (term ((Array (Σ [(s Shape)] (Array Int s)) {Shp 3})
+                ((i-app (array {3} [iota iota iota]
+                               : (Array (Π [(r Dim)]
+                                           (Array (-> [(Array Int {Shp r})]
+                                                      (Array (Σ [(s Shape)]
+                                                                (Array Int s))
+                                                             {Shp}))
+                                                  {Shp}))
+                                        {Shp 3}))
+                        2
+                        : (Array
+                           (-> [(Array Int {Shp 2})]
+                               (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
+                           {Shp 3}))
+                 (array {3 2} [1 2 3 4 5 6] : (Array Int {Shp 3 2}))
+                 : (Array (Σ [(s Shape)] (Array Int s)) {Shp 3}))))))
+  ;; Applying primop
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr [] [] []
+                  ((array {2} [+ *])
+                   (array {2 3} [2 3 4 5 6 7])
+                   (array {} [10]))
+                  type expr:t)
+    (type expr:t))
+   (list (term ((Array Int {Shp 2 3})
+                ((array {2} [+ *] : (Array (-> [(Array Int {Shp})
+                                               (Array Int {Shp})]
+                                              (Array Int {Shp}))
+                                          {Shp 2}))
+                 (array {2 3} [2 3 4 5 6 7] : (Array Int {Shp 2 3}))
+                 (array {} [10] : (Array Int {Shp}))
+                 : (Array Int {Shp 2 3}))))))
+  ;; Using the contents of a box
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr [] [] []
+                  (unbox (sh tensor ((i-app (array {} [iota]) 3)
+                                   (array {3} [2 4 5])))
+                    ((i-app (t-app (array {} [shape]) Int) sh) tensor))
+                  type expr:t)
+    (type expr:t))
+   (list (term ((Array (Σ [(rank Dim)] (Array Int {Shp rank})) {Shp})
+                (unbox (sh
+                        tensor
+                        ((i-app (array {} [iota]
+                                       : (Array
+                                          (Π [(r Dim)]
+                                             (Array
+                                              (-> [(Array Int {Shp r})]
+                                                  (Array
+                                                   (Σ [(s Shape)]
+                                                      (Array Int s))
+                                                   {Shp}))
+                                              {Shp}))
+                                          {Shp}))
+                                3
+                                : (Array
+                                   (-> [(Array Int {Shp 3})]
+                                       (Array
+                                        (Σ [(s Shape)]
+                                           (Array Int s))
+                                        {Shp}))
+                                   {Shp}))
+                         (array {3} [2 4 5] : (Array Int {Shp 3}))
+                         : (Array
+                            (Σ [(s Shape)]
+                               (Array Int s))
+                            {Shp})))
+                  ((i-app
+                    (t-app
+                     (array {} [shape]
+                            : (Array
+                               (∀ [(t Atom)]
+                                  (Array
+                                   (Π [(s Shape)]
+                                      (Array
+                                       (-> [(Array t s)]
+                                           (Array (Σ [(r Dim)]
+                                                     (Array Int {Shp r}))
+                                                  {Shp}))
+                                       {Shp}))
+                                   {Shp}))
+                               {Shp}))
+                                 Int
+                                 : (Array
+                                    (Π [(s Shape)]
+                                       (Array
+                                        (-> [(Array Int s)]
+                                            (Array (Σ [(r Dim)]
+                                                      (Array Int {Shp r}))
+                                                   {Shp}))
+                                        {Shp}))
+                                    {Shp}))
+                          sh
+                          : (Array
+                             (-> [(Array Int sh)]
+                                 (Array (Σ [(r Dim)]
+                                           (Array Int {Shp r}))
+                                        {Shp}))
+                             {Shp}))
+                   (tensor : (Array Int sh))
+                   : (Array (Σ [(rank Dim)] (Array Int {Shp rank})) {Shp}))
+                  : (Array (Σ [(rank Dim)] (Array Int {Shp rank})) {Shp}))))))
+  ;; Misuing the contents of a box by letting hidden index info leak out
+  (check-false
+   (judgment-holds
+    (type-of/expr [] [] []
+                  (unbox (sh tensor ((i-app (array {} [iota]) 3)
+                                   (array {3} [2 4 5])))
+                    tensor)
+                  type expr:t))))
 
 ;;; Stub code for type/idx equivalence judgments -- syntactic equality for now
 (define-judgment-form Remora-explicit
@@ -287,46 +570,105 @@
    (idx->* {++ idx_old ...}
            {++ idx_new ...})])
 
-;;; Metafunction wrappers for type-of judgment which produces the fully annotated
+;;; Update an environment with new entries (pass original environment first)
+(define-metafunction Remora-explicit
+  update : [(var any) ...] [(var any) ...] -> [(var any) ...]
+  [(update [any_0 ... (var any_old) any_1 ...]
+           [any_2 ... (var any_new) any_3 ...])
+   (update [any_0 ... (var any_new) any_1 ...]
+           [any_2 ... any_3 ...])]
+  [(update [any_old ...] [any_new ...]) [any_old ... any_new ...]])
+(module+ test
+  (check-equal? (term (update [] [])) (term []))
+  (check-equal? (term (update [] [(x 3)])) (term [(x 3)]))
+  (check-equal? (term (update [(y 4)] [(x 3)]))
+                (term [(y 4) (x 3)]))
+  (check-equal? (term (update [(y 4)] [(y 3)]))
+                (term [(y 3)]))
+  (check-equal? (term (update [(y 4) (x 5)] [(y 3)]))
+                (term [(y 3) (x 5)]))
+  (check-equal? (term (update [(q 9) (y 4) (x 5)] [(y 3)]))
+                (term [(q 9) (y 3) (x 5)]))
+  (check-equal? (term (update [(q 9) (y 4) (x 5)] [(y 3) (q 12)]))
+                (term [(q 12) (y 3) (x 5)]))
+  (check-equal? (term (update [(q 9) (y 4) (x 5)] [(y 3) (q 12) (z 0)]))
+                (term [(q 12) (y 3) (x 5) (z 0)])))
+
+;;; Substitution for many variables
+;;; TODO: does it need to be rewritten to do simultaneous substitution instead?
+(define-metafunction Remora-explicit
+  subst* : any [(var any) ...] -> any
+  [(subst* any []) any]
+  [(subst* any_orig [(var any_new) any_subs ...])
+   (subst* (substitute any_orig var any_new) [any_subs ...])])
+
+;;; Metafunction wrappers for type-of judgment which produces fully annotated
 ;;; version of a closed term (elaborate) or possibly open terms (elaborate/env)
 (define-metafunction Remora-annotated
-  elaborate/env : sort-env kind-env type-env expr -> expr:t
-  [(elaborate/env sort-env kind-env type-env expr)
+  elaborate-atom/env : sort-env kind-env type-env atom -> atom:t
+  [(elaborate-atom/env sort-env kind-env type-env atom)
+   atom:t_out
+   (where (atom:t_out _ ...)
+     ,(judgment-holds
+       (type-of/atom sort-env kind-env type-env atom _ atom:t)
+       atom:t))])
+(define-metafunction Remora-annotated
+  elaborate-expr/env : sort-env kind-env type-env expr -> expr:t
+  [(elaborate-expr/env sort-env kind-env type-env expr)
    expr:t_out
    (where (expr:t_out _ ...)
      ,(judgment-holds
-       (type-of sort-env kind-env type-env expr _ expr:t)
+       (type-of/expr sort-env kind-env type-env expr _ expr:t)
        expr:t))])
 (define-metafunction Remora-annotated
-  elaborate : expr -> expr:t
-  [(elaborate expr) (elaborate/env () () () expr)])
+  elaborate/env : sort-env kind-env type-env AE -> AE:t
+  [(elaborate/env any ... atom) (elaborate-atom/env any ... atom)]
+  [(elaborate/env any ... expr) (elaborate-expr/env any ... expr)])
+(define-metafunction Remora-annotated
+  elaborate-atom : atom -> atom:t
+  [(elaborate-atom atom) (elaborate-atom/env () () () atom)])
+(define-metafunction Remora-annotated
+  elaborate-expr : expr -> expr:t
+  [(elaborate-expr expr) (elaborate-expr/env () () () expr)])
+(define-metafunction Remora-annotated
+  elaborate : AE -> AE:t
+  [(elaborate atom) (elaborate-atom atom)]
+  [(elaborate expr) (elaborate-expr expr)])
+
 
 ;;; Convert fully annotated term to minimally annotated form
 (define-metafunction Remora-annotated
-  unelaborate : expr:t -> expr
+  unelaborate : AE:t -> AE
   [(unelaborate base-val) base-val]
   [(unelaborate op) op]
   [(unelaborate (var : type)) var]
-  [(unelaborate (λ var expr:t : ((type_in -> _) _)))
-   (λ var type_in (unelaborate expr:t))]
-  [(unelaborate (Tλ var expr:t : _))
-   (Tλ var (unelaborate expr:t))]
-  [(unelaborate (Iλ var sort expr:t : _))
-   (λ var sort (unelaborate expr:t))]
-  [(unelaborate (Arr [expr:t ...] {natural_0 ... 0 natural_1} : [type _]))
-   (Arr type {natural_0 ... 0 natural_1})]
-  [(unelaborate (Arr [expr:t ...] {natural ...} : type))
-   (Arr [(unelaborate expr:t) ...] {natural ...})]
-  [(unelaborate (expr:t_f expr:t_a : type))
-   ((unelaborate expr:t_f) (unelaborate expr:t_a))]
-  [(unelaborate (TApp expr:t type : _))
-   (TApp (unelaborate expr:t) type)]
-  [(unelaborate (IApp expr:t idx : _))
-   (IApp (unelaborate expr:t) idx)]
-  [(unelaborate (Box idx expr:t : type))
-   (Box idx expr:t type)]
-  [(unelaborate (Unbox (var_i var_e expr:t_box) expr:t_body : type))
-   (Unbox (var_i var_e (unelaborate expr:t_box)) (unelaborate expr:t_body))])
+  [(unelaborate (λ [var ...] expr:t : ((type_in -> _) _)))
+   (λ [(var type_in) ...] (unelaborate expr:t))]
+  [(unelaborate (tλ [var ...] expr:t : (∀ [(_ kind) ...] _)))
+   (tλ [(var kind) ...] (unelaborate expr:t))]
+  [(unelaborate (iλ [var ...] expr:t : (Π [(_ sort) ...] _)))
+   (iλ [(var sort) ...] (unelaborate expr:t))]
+  [(unelaborate (array {natural_0 ... 0 natural_1 ...} _ : (Array type _)))
+   (array type {natural_0 ... 0 natural_1 ...})]
+  [(unelaborate (array {natural ...} [atom:t ...] : type))
+   (array {natural ...} [(unelaborate atom:t) ...])]
+  [(unelaborate (frame {natural_0 ... 0 natural_1 ...} _
+                       : (Array type idx)))
+   (frame {natural_0 ... 0 natural_1 ...}
+          (Array type (drop-prefix {Shp natural_0 ... 0 natural_1 ...} idx)))]
+  [(unelaborate (frame {natural ...} [expr:t ...] : (Array type _)))
+   (frame {natural ...} [(unelaborate expr:t) ...])]
+  [(unelaborate (expr:t_f expr:t_a ... : type))
+   ((unelaborate expr:t_f) (unelaborate expr:t_a) ...)]
+  [(unelaborate (TApp expr:t type ... : _))
+   (t-app (unelaborate expr:t) type ...)]
+  [(unelaborate (IApp expr:t idx ... : _))
+   (i-app (unelaborate expr:t) idx ...)]
+  [(unelaborate (Box idx ... expr:t : type))
+   (box idx ... expr:t type)]
+  [(unelaborate (Unbox (var_i ... var_e expr:t_box) expr:t_body : type))
+   (unbox (var_i ... var_e (unelaborate expr:t_box))
+     (unelaborate expr:t_body))])
 
 ;;; Pass expected shape and actual shape. This metafunction assumes the indices
 ;;; passed in are well-formed Shapes. Returns the frame shape if it exists.
@@ -364,7 +706,23 @@
                  {Shp idx_0 ...})
    {Shp idx_0 ... idx_1 ...}]
   [(larger-frame _ _) #f])
+(define-metafunction Remora-explicit
+  largest-frame : [idx ...+] -> idx ∪ #f
+  [(largest-frame [idx]) idx]
+  [(largest-frame [idx_0 idx_1 idx_rest ...])
+   (largest-frame [idx_lrg idx_rest ...])
+   (where idx_lrg (larger-frame idx_0 idx_1))]
+  [(largest-frame _) #f])
 
+;;; Remove a specified prefix from a shape
+(define-metafunction Remora-explicit
+  drop-prefix : idx idx -> idx
+  [(drop-prefix idx idx) {Shp}]
+  [(drop-prefix {Shp idx_0 ...}
+                {Shp idx_0 ... idx_1 ...})
+   {Shp idx_1 ...}]
+  ;; TODO: handle append
+  #;[(drop-prefix {++ } {})])
 
 ;;; TODO: summand-order metafunction (this is stub code)
 ;;; Move the summands from an index into canonical order. Lead with a single
