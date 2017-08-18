@@ -3,7 +3,7 @@
 (require redex
          "language.rkt")
 (provide Remora-annotated
-         sort-of kind-of type-of/atom type-of/expr type-eqv idx->*
+         sort-of kind-of type-of/atom type-of/expr type-eqv
          elaborate elaborate/env unelaborate)
 
 (module+ test
@@ -47,7 +47,8 @@
   (λ [var ...] expr:t #:refers-to (shadow var ...) : type)
   (tλ [var ...] expr:t #:refers-to (shadow var ...) : type)
   (iλ [var ...] expr:t #:refers-to (shadow var ...) : type)
-  (Unbox (var_i ... var_e expr:t) expr:t #:refers-to (shadow var_i ... var_e) : type))
+  (unbox (var_i ... var_e expr:t)
+    expr:t #:refers-to (shadow var_i ... var_e) : type))
 
 
 (define-judgment-form Remora-explicit
@@ -544,31 +545,20 @@
 (define-judgment-form Remora-explicit
   #:mode (type-eqv I I)
   #:contract (type-eqv type type)
-  [(type-eqv type type)])
+  [(side-condition ,(alpha-equivalent?
+                     Remora-explicit
+                     (term (normalize-indices type_0))
+                     (term (normalize-indices type_1))))
+   ---
+   (type-eqv type_0 type_1)])
 (define-judgment-form Remora-explicit
   #:mode (idx-eqv I I)
   #:contract (idx-eqv idx idx)
-  [(idx-eqv idx idx)])
+  [(side-condition ,(equal? (term (normalize-idx idx_0))
+                            (term (normalize-idx idx_1))))
+   ---
+   (idx-eqv idx_0 idx_1)])
 
-;;; Reduction on type indices
-(define-judgment-form Remora-explicit
-  #:mode (idx->* I O)
-  #:contract (idx->* idx idx)
-  [(idx->* natural natural)]
-  [(idx->* var var)]
-  [(idx->* idx_old idx_new) ...
-   ---
-   (idx->* {Shp idx_old ...}
-           {Shp idx_new ...})]
-  [(idx->* idx_old idx_reduced) ...
-   (where (idx_new ...) (summand-order (idx_reduced ...)))
-   ---
-   (idx->* {+ idx_old ...}
-           {+ idx_new ...})]
-  [(idx->* idx_old idx_new) ...
-   ---
-   (idx->* {++ idx_old ...}
-           {++ idx_new ...})])
 
 ;;; Update an environment with new entries (pass original environment first)
 (define-metafunction Remora-explicit
@@ -666,7 +656,7 @@
    (i-app (unelaborate expr:t) idx ...)]
   [(unelaborate (Box idx ... expr:t : type))
    (box idx ... expr:t type)]
-  [(unelaborate (Unbox (var_i ... var_e expr:t_box) expr:t_body : type))
+  [(unelaborate (unbox (var_i ... var_e expr:t_box) expr:t_body : type))
    (unbox (var_i ... var_e (unelaborate expr:t_box))
      (unelaborate expr:t_body))])
 
@@ -724,62 +714,49 @@
   ;; TODO: handle append
   #;[(drop-prefix {++ } {})])
 
-;;; TODO: summand-order metafunction (this is stub code)
-;;; Move the summands from an index into canonical order. Lead with a single
-;;; literal nat (or elide it if it would be 0), and follow with variables in
-;;; lexicographic order.
-(define-metafunction Remora-explicit
-  summand-order : (idx ...) -> (idx ...)
-  [(summand-order any) any])
-
 ;;; Reduce a type index to a canonical normal form.
 (define-metafunction Remora-explicit
   normalize-idx : idx -> idx
   [(normalize-idx natural) natural]
+  [(normalize-idx var) var]
   [(normalize-idx {Shp idx ...})
    {Shp (normalize-idx idx) ...}]
-  [(normalize-idx var) var]
-  [(normalize-idx {++ idx ...})
-   idx_n
-   (where {idx_n} (merge-append {(normalize-idx idx) ...}))]
-  [(normalize-idx {++ idx ...})
-   {++ idx_n ...}
-   (where (idx_n ...) (merge-append {(normalize-idx idx) ...}))])
+  [(normalize-idx {+ idx_0 ... {+ idx_1 ...} idx_2 ...})
+   (normalize-idx {+ idx_0 ... idx_1 ... idx_2 ...})]
+  [(normalize-idx {+ idx_0 ... natural_0 idx_1 ... natural_1 idx_2 ...})
+   (normalize-idx {+ ,(+ (term natural_0) (term natural_1))
+                        idx_0 ... idx_1 ... idx_2 ...})]
+  [(normalize-idx {+ idx_0 idx_1 ... natural idx_2 ...})
+   (normalize-idx {+ natural idx_0 idx_1 ... idx_2 ...})]
+  [(normalize-idx {+ idx}) idx]
+  [(normalize-idx {+}) 0]
+  [(normalize-idx {+ natural ... var ...})
+   {+ natural ... var_sorted ...}
+   (where {var_sorted ...}
+     ,(sort (term {var ...}) symbol<?))]
+  [(normalize-idx {++ idx_0 ...
+                        {++ idx_1 ...}
+                        idx_2 ...})
+   (normalize-idx {++ idx_0 ... idx_1 ... idx_2 ...})]
+  [(normalize-idx {++ idx_0 ... {Shp idx_1 ...} {Shp idx_2 ...} idx_3 ...})
+   (normalize-idx {++ idx_0 ... {Shp idx_1 ... idx_2 ...} idx_3 ...})]
+  [(normalize-idx {++ {Shp idx ...}}) {Shp idx ...}]
+  [(normalize-idx {++}) {Shp}]
+  [(normalize-idx {++ idx ...}) {++ idx ...}])
+
+;;; Rewrite every index which appears in a type in its canonical form
 (define-metafunction Remora-explicit
-  merge-append : {idx ...} -> {idx ...}
-  [(merge-append {idx_0 ... {++ idx_s ...} idx_1 ...})
-   (merge-append {idx_0 ... idx_s ... idx_1 ...})]
-  [(merge-append {idx_0 ... {Shp idx_s0 ...} {Shp idx_s1 ...} idx_1 ...})
-   (merge-append {idx_0 ... {Shp idx_s0 ... idx_s1 ...} idx_1 ...})]
-  [(merge-append any) any])
-(define-metafunction Remora-explicit
-  ;; Three things can appear inside a (well-formed) sum:
-  ;; - natural
-  ;; - variable
-  ;; - sum
-  ;; The canonical form for a sum is flattened, with all variables in
-  ;; lexicographic order and a single natural number at the front (or no
-  ;; natural number literals at all).
-  merge-plus : {idx ...} -> {idx ...}
-  ;; Flatten any nested sums
-  [(merge-plus {idx_0 ... {+ idx_1 ...} idx_2 ...})
-   (merge-plus {idx_0 ... idx_1 ... idx_2 ...})]
-  ;; If there are at least two numeric literals, add and move them to the front
-  [(merge-plus {idx_0 ... natural_0 idx_1 ... natural_1 idx_2 ...})
-   (merge-plus {,(+ (term natural_0)
-                    (term natural_1))
-                idx_0 ... idx_1 ... idx_2 ...})]
-  ;; For just one numeric literal, move it to the front
-  [(merge-plus {idx_0 ... natural idx_1 ...})
-   (merge-plus {natural idx_0 ... idx_1 ...})]
-  ;; If these cases are reached, we should have only variables and possibly one
-  ;; numeric literal remaining
-  [(merge-plus {natural var ...})
-   (merge-plus ,(cons (term natural)
-                      (sort (λ (l r) (string<=? (symbol->string l)
-                                                (symbol->string r)))
-                            (term {var ...}))))]
-  [(merge-plus {var ...})
-   (merge-plus ,(sort (λ (l r) (string<=? (symbol->string l)
-                                          (symbol->string r)))
-                 (term {var ...})))])
+  normalize-indices : type -> type
+  [(normalize-indices var) var]
+  [(normalize-indices base-type) base-type]
+  [(normalize-indices (-> [type_in ...] type_out))
+   (-> [(normalize-indices type_in) ...]
+       (normalize-indices type_out))]
+  [(normalize-indices (∀ [(var kind) ...] type))
+   (∀ [(var kind) ...] (normalize-indices type))]
+  [(normalize-indices (Π [(var sort) ...] type))
+   (Π [(var sort) ...] (normalize-indices type))]
+  [(normalize-indices (Σ [(var sort) ...] type))
+   (Σ [(var sort) ...] (normalize-indices type))]
+  [(normalize-indices (Array type idx))
+   (Array (normalize-indices type) (normalize-idx idx))])
