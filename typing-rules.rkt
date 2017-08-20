@@ -4,7 +4,9 @@
          "language.rkt")
 (provide Remora-annotated
          sort-of kind-of type-of/atom type-of/expr type-eqv
-         elaborate elaborate/env unelaborate)
+         elaborate elaborate/env unelaborate
+         drop-prefix drop-suffix
+         normalize-idx normalize-indices)
 
 (module+ test
   (require rackunit)
@@ -43,6 +45,12 @@
          (array (natural ...) (scal:t ...) : type))
   (AE:t atom:t expr:t)
   (var:t (var : type))
+  ;; Normalized form of type indices
+  (nidx nshp ndim)
+  (nshp fshp {++ fshp fshp ...+} {Shp}) ; normalized shape
+  (fshp var {Shp ndim ndim ...+}) ; fragment shape
+  (ndim aidx {+ aidx aidx ...+}) ; normalized dim
+  (aidx var natural) ; atomic index
   #:binding-forms
   (λ [var ...] expr:t #:refers-to (shadow var ...) : type)
   (tλ [var ...] expr:t #:refers-to (shadow var ...) : type)
@@ -300,7 +308,7 @@
    (where ((Array type_arg idx_arg) ...) (type_actual ...))
    (type-eqv type_in type_arg) ...
    ;; Identify each argument's frame.
-   (where (idx_afr ...) ((frame-contribution idx_in idx_arg) ...))
+   (where (idx_afr ...) ((drop-suffix idx_in idx_arg) ...))
    ;; The largest frame is the principal frame.
    (where idx_pfr (largest-frame [idx_ffr idx_afr ...]))
    --- type-app
@@ -664,26 +672,29 @@
 ;;; passed in are well-formed Shapes. Returns the frame shape if it exists.
 ;;; Otherwise, return false.
 (define-metafunction Remora-explicit
-  frame-contribution : idx idx -> idx ∪ #f
-  [(frame-contribution {Shp} idx) idx]
-  [(frame-contribution idx idx) {Shp}]
-  ;; TODO: Loosen this pattern to allow guaranteed-equal indices in idx_0 rather
-  ;; than only syntactically identical indices.
-  [(frame-contribution {Shp idx_0 ...}
-                       {Shp idx_1 ... idx_0 ...})
-   {Shp idx_1 ...}]
-  ;; TODO: Handle append.
-  #;[(frame-contribution {++ idx_0 ...}
-                         {++ idx_1 ...})
-     ....]
-  ;; Two different variables are not provably equal. (If both vars are the same,
-  ;; it will be caught by an earlier case.)
-  [(frame-contribution var var) #f]
-  [(frame-contribution _ _) #f])
+  drop-suffix : idx idx -> idx ∪ #f
+  [(drop-suffix idx_0 idx_1)
+   (drop-suffix/normalized (normalize-idx idx_0) (normalize-idx idx_1))])
+(define-metafunction Remora-annotated
+  drop-suffix/normalized : nshp nshp -> nshp ∪ #f
+  [(drop-suffix/normalized {Shp} idx) idx]
+  [(drop-suffix/normalized idx idx) {Shp}]
+  [(drop-suffix/normalized {Shp ndim_0 ... ndim_2 ndim_3 ...}
+                           {Shp ndim_1 ... ndim_2 ndim_3 ...})
+   (drop-suffix/normalized (normalize-idx {Shp ndim_0 ...})
+                           (normalize-idx {Shp ndim_1 ...}))]
+  [(drop-suffix/normalized {++ fshp_0 ... fshp_2 fshp_3 ...}
+                           {++ fshp_1 ... fshp_2 fshp_3 ...})
+   (drop-suffix/normalized (normalize-idx {++ fshp_0 ...})
+                           (normalize-idx {++ fshp_1 ...}))]
+  [(drop-suffix/normalized {++ fshp_0 ... {Shp ndim_0 ... ndim_2 ndim_3 ...}}
+                           {++ fshp_1 ... {Shp ndim_1 ... ndim_2 ndim_3 ...}})
+   (drop-suffix/normalized (normalize-idx {++ fshp_0 ... {Shp ndim_0 ...}})
+                           (normalize-idx {++ fshp_1 ... {Shp ndim_1 ...}}))]
+  [(drop-suffix/normalized _ _) #f])
 
 ;;; Identify which frame has the other as a prefix. Return false if neither one
 ;;; is prefixed by the other.
-;;; TODO: Allow looser than exact syntactic match, like for frame-contribution.
 (define-metafunction Remora-explicit
   larger-frame : idx idx -> idx ∪ #f
   [(larger-frame {Shp} idx) idx]
@@ -707,16 +718,28 @@
 ;;; Remove a specified prefix from a shape
 (define-metafunction Remora-explicit
   drop-prefix : idx idx -> idx
-  [(drop-prefix idx idx) {Shp}]
-  [(drop-prefix {Shp idx_0 ...}
-                {Shp idx_0 ... idx_1 ...})
-   {Shp idx_1 ...}]
-  ;; TODO: handle append
-  #;[(drop-prefix {++ } {})])
+  [(drop-prefix idx_0 idx_1) (drop-prefix/normalized idx_0 idx_1)])
+(define-metafunction Remora-annotated
+  drop-prefix/normalized : nshp nshp -> nshp ∪ #f
+  [(drop-prefix/normalized {Shp} nshp) nshp]
+  [(drop-prefix/normalized idx idx) {Shp}]
+  [(drop-prefix/normalized {Shp ndim_2 ndim_3 ... ndim_0 ...}
+                           {Shp ndim_2 ndim_3 ... ndim_1 ...})
+   (drop-prefix/normalized (normalize-idx {Shp ndim_0 ...})
+                           (normalize-idx {Shp ndim_1 ...}))]
+  [(drop-prefix/normalized {++ fshp_2 fshp_3 ... fshp_0 ...}
+                           {++ fshp_2 fshp_3 ... fshp_1 ...})
+   (drop-prefix/normalized (normalize-idx {++ fshp_0 ...})
+                           (normalize-idx {++ fshp_1 ...}))]
+  [(drop-prefix/normalized {++ {Shp ndim_2 ndim_3 ... ndim_0 ...} fshp_0 ...}
+                           {++ {Shp ndim_2 ndim_3 ... ndim_1 ...} fshp_1 ...})
+   (drop-prefix/normalized (normalize-idx {++ {Shp ndim_0 ...} fshp_0 ...})
+                           (normalize-idx {++ {Shp ndim_1 ...} fshp_1 ...}))]
+  [(drop-prefix/normalized _ _) #f])
 
 ;;; Reduce a type index to a canonical normal form.
-(define-metafunction Remora-explicit
-  normalize-idx : idx -> idx
+(define-metafunction Remora-annotated
+  normalize-idx : idx -> nidx
   [(normalize-idx natural) natural]
   [(normalize-idx var) var]
   [(normalize-idx {Shp idx ...})
@@ -745,7 +768,7 @@
   [(normalize-idx {++ idx ...}) {++ idx ...}])
 
 ;;; Rewrite every index which appears in a type in its canonical form
-(define-metafunction Remora-explicit
+(define-metafunction Remora-annotated
   normalize-indices : type -> type
   [(normalize-indices var) var]
   [(normalize-indices base-type) base-type]
