@@ -697,7 +697,7 @@
   [(unelaborate base-val) base-val]
   [(unelaborate op) op]
   [(unelaborate (var : type)) var]
-  [(unelaborate (λ [var ...] expr:t : ((type_in -> _) _)))
+  [(unelaborate (λ [var ...] expr:t : (-> [type_in ...] _)))
    (λ [(var type_in) ...] (unelaborate expr:t))]
   [(unelaborate (tλ [var ...] expr:t : (∀ [(_ kind) ...] _)))
    (tλ [(var kind) ...] (unelaborate expr:t))]
@@ -715,9 +715,9 @@
    (frame {natural ...} [(unelaborate expr:t) ...])]
   [(unelaborate (expr:t_f expr:t_a ... : type))
    ((unelaborate expr:t_f) (unelaborate expr:t_a) ...)]
-  [(unelaborate (TApp expr:t type ... : _))
+  [(unelaborate (t-app expr:t type ... : _))
    (t-app (unelaborate expr:t) type ...)]
-  [(unelaborate (IApp expr:t idx ... : _))
+  [(unelaborate (i-app expr:t idx ... : _))
    (i-app (unelaborate expr:t) idx ...)]
   [(unelaborate (Box idx ... expr:t : type))
    (box idx ... expr:t type)]
