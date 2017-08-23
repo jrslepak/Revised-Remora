@@ -3,7 +3,7 @@
 (require redex
          "language.rkt")
 (provide Remora-annotated
-         sort-of kind-of type-of/atom type-of/expr type-eqv
+         sort-of kind-of type-of/atom type-of/expr type-eqv idx-eqv idx=?
          elaborate elaborate/env unelaborate
          drop-prefix drop-suffix
          normalize-idx normalize-indices)
@@ -351,13 +351,10 @@
                  (i-app expr idx_arg ...)
                  type_subbed
                  (i-app expr:t idx_arg ... : type_subbed))]
-  [#;(side-condition ,(printf "attempting type-unbox\n"))
-   (type-of/expr sort-env kind-env type-env
+  [(type-of/expr sort-env kind-env type-env
                  expr_box
-                 type_box ;(Σ [(var_sum sort) ...] type_contents)
+                 type_box
                  expr:t_box)
-   #;(side-condition ,(printf "box position has type ~v\n"
-                            (term type_box)))
    (where (Array (Σ [(var_sum sort) ...] type_contents) {Shp}) type_box)
    (type-of/expr (update sort-env [(var_i sort) ...])
                  kind-env
@@ -585,7 +582,14 @@
                             (term (normalize-idx idx_1))))
    ---
    (idx-eqv idx_0 idx_1)])
-
+(define-metafunction Remora-explicit
+  idx=? : idx idx -> boolean
+  [(idx=? idx_0 idx_1)
+   ,(equal? (term (normalize-idx idx_0))
+            (term (normalize-idx idx_1)))
+   #;(side-condition (printf "comparing ~v and ~v\n"
+                           (term (normalize-idx idx_0))
+                           (term (normalize-idx idx_1))))])
 
 ;;; Update an environment with new entries (pass original environment first)
 (define-metafunction Remora-explicit
@@ -716,15 +720,12 @@
 ;;; is prefixed by the other.
 (define-metafunction Remora-explicit
   larger-frame : idx idx -> idx ∪ #f
-  [(larger-frame {Shp} idx) idx]
-  [(larger-frame idx {Shp}) idx]
-  [(larger-frame idx idx) idx]
-  [(larger-frame {Shp idx_0 ...}
-                 {Shp idx_0 ... idx_1 ...})
-   {Shp idx_0 ... idx_1 ...}]
-  [(larger-frame {Shp idx_0 ... idx_1 ...}
-                 {Shp idx_0 ...})
-   {Shp idx_0 ... idx_1 ...}]
+  [(larger-frame idx_0 idx_1)
+   idx_0
+   (where idx_diff (drop-prefix idx_1 idx_0))]
+  [(larger-frame idx_0 idx_1)
+   idx_1
+   (where idx_diff (drop-prefix idx_0 idx_1))]
   [(larger-frame _ _) #f])
 (define-metafunction Remora-explicit
   largest-frame : [idx ...+] -> idx ∪ #f
@@ -736,8 +737,10 @@
 
 ;;; Remove a specified prefix from a shape
 (define-metafunction Remora-explicit
-  drop-prefix : idx idx -> idx
-  [(drop-prefix idx_0 idx_1) (drop-prefix/normalized idx_0 idx_1)])
+  drop-prefix : idx idx -> idx ∪ #f
+  [(drop-prefix idx_0 idx_1)
+   (drop-prefix/normalized (normalize-idx idx_0)
+                           (normalize-idx idx_1))])
 (define-metafunction Remora-annotated
   drop-prefix/normalized : nshp nshp -> nshp ∪ #f
   [(drop-prefix/normalized {Shp} nshp) nshp]
