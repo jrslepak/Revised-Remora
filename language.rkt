@@ -2,8 +2,10 @@
 
 (require redex)
 (provide Remora-explicit
-         Scl scalar &-> &Π &Σ &∀ &
+         Scl scl &-> &Π &Σ &∀ &
          op->type)
+
+;;; TODO: Specialized forms of polymorphic primops should be treated as primops.
 
 (define-language Remora-explicit
   (var variable-not-otherwise-mentioned)
@@ -76,7 +78,7 @@
   ;; Note: Unlike in earlier Redex models of DML-like languages, Redex's
   ;; built-in binding mechanics only allow for a single namespace.
   #:binding-forms
-  (λ var type expr #:refers-to var)
+  (λ [(var type) ...] expr #:refers-to (shadow var ...))
   (tλ [(var kind) ...] val #:refers-to (shadow var ...))
   (iλ [(var sort) ...] val #:refers-to (shadow var ...))
   (Unbox (var_i ... var_e expr) expr #:refers-to (shadow var_i ... var_e))
@@ -86,8 +88,8 @@
 
 ;;; Build a scalar expr from any atom
 (define-metafunction Remora-explicit
-  scalar : atom -> expr
-  [(scalar atom) (array {} [atom])])
+  scl : atom -> expr
+  [(scl atom) (array {} [atom])])
 ;;; Build an Array type from any Atom type by applying to the scalar Shape
 (define-metafunction Remora-explicit
     Scl : type -> type
