@@ -5,8 +5,9 @@
 (provide Remora-annotated
          sort-of kind-of type-of/atom type-of/expr type-eqv idx-eqv idx=?
          elaborate elaborate/env unelaborate
-         drop-prefix drop-suffix
-         normalize-idx normalize-indices)
+         drop-prefix drop-suffix largest-frame
+         normalize-idx normalize-indices
+         subst* subst:t subst:t*)
 
 (module+ test
   (require rackunit)
@@ -617,11 +618,44 @@
 
 ;;; Substitution for many variables
 ;;; TODO: does it need to be rewritten to do simultaneous substitution instead?
-(define-metafunction Remora-explicit
+(define-metafunction Remora-annotated
   subst* : any [(var any) ...] -> any
   [(subst* any []) any]
   [(subst* any_orig [(var any_new) any_subs ...])
    (subst* (substitute any_orig var any_new) [any_subs ...])])
+;;; Substitution for type-annotated variables
+(define-metafunction Remora-annotated
+  subst:t : AE:t var any -> AE:t
+  [(subst:t base-val _ _) base-val]
+  [(subst:t op _ _) op]
+  [(subst:t (λ [var_l ...] expr:t : type) var any)
+   (λ [var_l ...] (subst:t expr:t var any) : type)]
+  [(subst:t (tλ [var_l ...] expr:t : type) var any)
+   (tλ [var_l ...] (subst:t expr:t var any) : type)]
+  [(subst:t (iλ [var_l ...] expr:t : type) var any)
+   (iλ [var_l ...] (subst:t expr:t var any) : type)]
+  [(subst:t (box idx ... expr:t : type) var any)
+   (box idx ... (subst expr:t var any) : type)]
+  [(subst:t (var : type) var any) any]
+  [(subst:t var:t var_other any) var:t]
+  [(subst:t (array {natural ...} [atom:t ...] : type) var any)
+   (array {natural ...} [(subst:t atom:t var any) ...] : type)]
+  [(subst:t (frame {natural ...} [expr:t ...] : type) var any)
+   (frame {natural ...} [(subst:t expr:t var any) ...] : type)]
+  [(subst:t (expr:t_fn expr:t_arg ... : type) var any)
+   ((subst:t expr:t_fn var any) (subst:t expr:t_arg var any) ... : type)]
+  [(subst:t (t-app expr:t type_arg ... : type_annot) var any)
+   (t-app (subst:t expr:t var any) type_arg ... : type_annot)]
+  [(subst:t (i-app expr:t idx ... : type) var any)
+   (i-app (subst:t expr:t var any) idx ... : type)]
+  [(subst:t (unbox (var_i ... var_e expr:t_box) expr:t_body : type) var any)
+   (unbox (var_i ... var_e (subst:t expr:t_box var any))
+     (subst:t expr:t_body var any) : type)])
+(define-metafunction Remora-annotated
+  subst:t* : AE:t [(var any) ...] -> AE:t
+  [(subst:t* AE:t []) AE:t]
+  [(subst:t* AE:t [(var any_new) any_subs ...])
+   (subst:t* (subst:t AE:t var any_new) [any_subs ...])])
 
 ;;; Metafunction wrappers for type-of judgment which produces fully annotated
 ;;; version of a closed term (elaborate) or possibly open terms (elaborate/env)
