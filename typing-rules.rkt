@@ -24,17 +24,16 @@
   (atom:t base-val
           op
           (λ [var ...] expr:t : type)
-          (tλ [var ...] expr:t : type)
-          (iλ [var ...] expr:t : type)
+          (tλ [var ...] val:t : type)
+          (iλ [var ...] val:t : type)
           (box idx ... expr:t : type))
   (atval:t base-val
            op
            (λ [var ...] expr:t : type)
-           (tλ [var ...] expr:t : type)
-           (iλ [var ...] expr:t : type)
+           (tλ [var ...] val:t : type)
+           (iλ [var ...] val:t : type)
            (box idx ... val:t : type))
-  (expr:t atom:t
-          var:t
+  (expr:t var:t
           (array {natural ...} [atom:t ...] : type)
           (frame {natural ...} [expr:t ...] : type)
           (expr:t expr:t ... : type)
@@ -42,7 +41,7 @@
           (i-app expr:t idx ... : type)
           (unbox (var var expr:t) expr:t : type))
   (val:t var:t
-         (array (natural ...) (scal:t ...) : type))
+         (array (natural ...) (atom:t ...) : type))
   (AE:t atom:t expr:t)
   (var:t (var : type))
   ;; Normalized form of type indices
