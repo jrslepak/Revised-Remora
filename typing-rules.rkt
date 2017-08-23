@@ -272,9 +272,12 @@
    --- type-frame
    (type-of/expr sort-env kind-env type-env
                  (frame {natural ...} [expr expr_rest ...])
-                 (Array type_cell {++ {Shp natural ...} idx_cell})
+                 (Array type_cell (normalize-idx
+                                   {++ {Shp natural ...} idx_cell}))
                  (frame {natural ...} [expr:t expr:t_rest ...]
-                        : (Array type_cell {++ {Shp natural ...} idx_cell})))]
+                        : (Array type_cell
+                                 (normalize-idx
+                                  {++ {Shp natural ...} idx_cell}))))]
   [(kind-of sort-env kind-env type Atom)
    (where {_ ... 0 _ ...} {natural ...})
    --- type-emptyA
@@ -290,7 +293,8 @@
                  (frame {natural ...} (Array type idx))
                  (Array type {Shp natural ...})
                  (frame {natural ...} []
-                        : (Array type {++ {Shp natural ...} idx})))]
+                        : (Array type (normalize-idx
+                                       {++ {Shp natural ...} idx}))))]
   [(type-of/expr sort-env kind-env type-env
                  expr_fn
                  ;; Identify the input and output cell types.
@@ -324,8 +328,9 @@
                  expr:t)
    (kind-of sort-env kind-env type_arg kind) ...
    (where type_subbed
-     (subst* (Array type_univ (normalize-idx {++ idx_frame idx_univ}))
-             [(var type_arg) ...]))
+     (normalize-indices
+      (subst* (Array type_univ (normalize-idx {++ idx_frame idx_univ}))
+              [(var type_arg) ...])))
    --- type-tapp
    (type-of/expr sort-env kind-env type-env
                  (t-app expr type_arg ...)
@@ -338,8 +343,9 @@
                  expr:t)
    (sort-of sort-env idx_arg sort) ...
    (where type_subbed
-     (subst* (Array type_pi (normalize-idx {++ idx_frame idx_pi}))
-             [(var idx_arg) ...]))
+     (normalize-indices
+      (subst* (Array type_pi (normalize-idx {++ idx_frame idx_pi}))
+              [(var idx_arg) ...])))
    --- type-iapp
    (type-of/expr sort-env kind-env type-env
                  (i-app expr idx_arg ...)
@@ -355,8 +361,9 @@
    (where (Array (Σ [(var_sum sort) ...] type_contents) {Shp}) type_box)
    (type-of/expr (update sort-env [(var_i sort) ...])
                  kind-env
-                 (update type-env [(var_e (subst* type_contents
-                                                  [(var_sum var_i) ...]))])
+                 (update type-env [(var_e (normalize-indices
+                                           (subst* type_contents
+                                                   [(var_sum var_i) ...])))])
                  expr_body
                  type_body
                  expr:t_body)
@@ -451,6 +458,19 @@
                            {Shp 3}))
                  (array {3 2} [1 2 3 4 5 6] : (Array Int {Shp 3 2}))
                  : (Array (Σ [(s Shape)] (Array Int s)) {Shp 3}))))))
+  ;; Lifting function that consumes non-scalars
+  (check-alpha-equivalent?
+   (judgment-holds
+    (type-of/expr () () ([f (Array (-> [(Array Int {Shp 2})
+                                        (Array Int {Shp 2})]
+                                       (Array Int {Shp}))
+                                   {Shp})])
+                  ((frame {3} [f f f])
+                   (array {3 2} [1 2 3 4 5 6])
+                   (array {3 2} [9 8 7 6 5 4]))
+                  type _)
+    type)
+   (list (term (Array Int {Shp 3}))))
   ;; Applying primop
   (check-alpha-equivalent?
    (judgment-holds
