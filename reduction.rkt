@@ -21,70 +21,41 @@
   (reduction-relation
    Remora-exec
    #:domain expr:t
-   [==> ((array {natural_f-frm ...}
-                [atom:t_fn ...]
-                : (Array (-> [(Array type_in idx_in) ...] type_out) idx_fn))
-         (array {natural_arg ...}
-                [atom:t_arg ...]
-                : (Array type_in idx_arg))
+   ;; TODO: try shortened version of lift rule, as scribbled in notebook
+   [==> ((array {natural_ff ...}
+                [atom:t_f ...]
+                : (Array (-> [(Array type_in {Shp natural_in ...}) ...]
+                             type_out)
+                         {Shp natural_ff ...}))
+         (array {natural_af ... natural_in ...}
+                [atom:t_a ...]
+                : (Array type_in {Shp natural_af ... natural_in ...}))
          ...
          : type_app)
-        ((array {natural_p-frm ...}
-                [atom:t_f-rep ...]
-                : (Array (-> [(Array type_in idx_in) ...] type_out)
-                         {Shp natural_p-frm ...}))
-         (array {natural_a-frm ... natural_a-exp ... natural_in ...}
-                [atom:t_a-rep ...]
-                : (Array type_in {Shp natural_a-frm ...
-                                      natural_a-exp ...
-                                      natural_in ...}))
+        ((array {natural_pf ...}
+                (concat (replicate-each
+                         (split [atom:t_f ...] (nprod {natural_ff ...}))
+                         natural_fe))
+                : (Array (-> [(Array type_in {Shp natural_in ...}) ...]
+                             type_out)
+                         {Shp natural_pf ...}))
+         (array {natural_pf ... natural_in ...}
+                (concat (replicate-each
+                         (split [atom:t_a ...] (nprod {natural_in ...}))
+                         natural_ae))
+                : (Array type_in {Shp natural_pf ... natural_in ...}))
          ...
          : type_app)
-        ;; Frames:
-        ;; -  {natural_f-frm ...}      (function position frame)
-        ;; - [{natural_a-frm ...} ...] (argument position frames)
-        ;; -  {natural_p-frm ...}      (principal frame)
-        (where [{Shp natural_a-frm ...} ...]
-          [(drop-suffix idx_in idx_arg) ...])
-        (where {Shp natural_p-frm ...}
-          (largest-frame [{Shp natural_f-frm ...} {Shp natural_a-frm ...} ...]))
-        ;; Require that at least one component frame be different from the
-        ;; principal frame -- otherwise, take a map or β step instead.
-        ;; Why doesn't the check work if written like this?
-        #;(where [_ ... #f _ ...] (term [(idx=? {Shp natural_f-frm ...}
-                                                {Shp natural_p-frm ...})
-                                         (idx=? {Shp natural_a-frm ...}
-                                                {Shp natural_p-frm ...}) ...]))
+        (where {Shp natural_pf ...}
+          (largest-frame [{Shp natural_ff ...} {Shp natural_af ...} ...]))
         (side-condition
-         (not (term (all [(idx=? {Shp natural_f-frm ...}
-                                 {Shp natural_p-frm ...})
-                          (idx=? {Shp natural_a-frm ...}
-                                 {Shp natural_p-frm ...}) ...]))))
-        ;; Expansions:
-        ;; -  {natural_f-exp ...}      (function position expansion)
-        ;; - [{natural_a-exp ...} ...] (argument position expansions)
-        (where {Shp natural_f-exp ...}
-          (drop-prefix {Shp natural_f-frm ...} {Shp natural_p-frm ...}))
-        (where [{Shp natural_a-exp ...} ...]
-          [(drop-prefix {Shp natural_a-frm ...} {Shp natural_p-frm ...}) ...])
-        (where natural_f-ratio (nprod {natural_f-exp ...}))
-        (where [natural_a-ratio ...] [(nprod {natural_a-exp ...}) ...])
-        ;; Cell sizes:
-        ;; - 1 (function cell)
-        ;; - [(* natural_in ...) ...] (argument cells)
-        (where [{Shp natural_in ...} ...]
-          [(normalize-idx idx_in) ...])
-        (where [(atom:t_f-cell) ...] (split [atom:t_fn ...] 1))
-        (where [[(atom:t_a-cell ...) ...] ...]
-          [(split [atom:t_arg ...] (nprod {natural_in ...})) ...])
-        (where [atom:t_f-rep ...]
-          (concat ((replicate (atom:t_f-cell) natural_f-ratio) ...)))
-        ;; A bit of manual lifting trickery because ellipses won't really line
-        ;; up in the right way on their own
-        (where ((natural_replic ...) ...)
-          ((copies natural_a-ratio (length/m [(atom:t_a-cell ...) ...])) ...))
-        (where [[atom:t_a-rep ...] ...]
-          [(concat ((replicate (atom:t_a-cell ...) natural_replic) ...)) ...])
+         (not (term (all [(idx=? {Shp natural_pf ...} {Shp natural_ff ...})
+                          (idx=? {Shp natural_pf ...} {Shp natural_af ...}) ...]))))
+        (where [natural_fe natural_ae ...]
+          [(nprod/s (drop-prefix {Shp natural_ff ...} {Shp natural_pf ...}))
+           (nprod/s (drop-prefix {Shp natural_af ...} {Shp natural_pf ...})) ...])
+        (where [(any_cell ...) ...]
+          ((split [atom:t_a ...] (nprod {natural_in ...})) ...))
         lift]
    [==> ((array {natural_fn ...} ; In a map redex, all frames are the same.
                 [atom:t_fn ...]
@@ -323,6 +294,10 @@
 (define-metafunction Remora-exec
   nprod : (natural ...) -> natural
   [(nprod (natural ...)) ,(foldr * 1 (term (natural ...)))])
+;;; Numeric product of a shape
+(define-metafunction Remora-exec
+  nprod/s : {Shp natural ...} -> natural
+  [(nprod/s {Shp natural ...}) (nprod (natural ...))])
 
 ;;; Boolean product of a list
 (define-metafunction Remora-exec
@@ -347,6 +322,10 @@
 (module+ test
   (check-equal? (term (replicate (a 3 #f) 4))
                 (term (a 3 #f a 3 #f a 3 #f a 3 #f))))
+;;; Make many replicas of each element in a list
+(define-metafunction Remora-exec
+  replicate-each : (any ...) natural -> (any ...)
+  [(replicate-each (any ...) natural) (concat ((copies any natural) ...))])
 
 ;;; Make a list with many of something
 (define-metafunction Remora-exec
