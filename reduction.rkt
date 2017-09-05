@@ -49,42 +49,43 @@
         (where {Shp natural_pf ...}
           (largest-frame [{Shp natural_ff ...} {Shp natural_af ...} ...]))
         (side-condition
-         (not (term (all [(idx=? {Shp natural_pf ...} {Shp natural_ff ...})
-                          (idx=? {Shp natural_pf ...} {Shp natural_af ...}) ...]))))
+         (not (term (all [(idx=?
+                           {Shp natural_pf ...} {Shp natural_ff ...})
+                          (idx=?
+                           {Shp natural_pf ...} {Shp natural_af ...}) ...]))))
         (where [natural_fe natural_ae ...]
-          [(nprod/s (drop-prefix {Shp natural_ff ...} {Shp natural_pf ...}))
-           (nprod/s (drop-prefix {Shp natural_af ...} {Shp natural_pf ...})) ...])
+          [(nprod/s
+            (drop-prefix {Shp natural_ff ...} {Shp natural_pf ...}))
+           (nprod/s
+            (drop-prefix {Shp natural_af ...} {Shp natural_pf ...})) ...])
         (where [(any_cell ...) ...]
           ((split [atom:t_a ...] (nprod {natural_in ...})) ...))
         lift]
-   [==> ((array {natural_fn ...} ; In a map redex, all frames are the same.
-                [atom:t_fn ...]
-                : (Array (-> [(Array type_in idx_in) ...] type_out) _))
-         (array {natural_arg ...}
-                [atom:t_arg ...]
-                : (Array type_arg idx_arg))
-         ... : type_app)
-        (frame {natural_fn ...}
-               [((array {} [atom:t_fn]
-                        : (Array (-> [(Array type_in idx_in) ...] type_out)
+   [==> ((array {natural_f ...}
+                [atval:t_f ...]
+                : (Array (-> [(Array type_in {Shp natural_in ...}) ...]
+                             type_out)
+                         {Shp natural_f ...}))
+         (array {natural_f0 ... natural_in ...}
+                [atval:t_a ...]
+                : (Array type_in {Shp natural_f0 ... natural_in ...}))
+         ...
+         : type_app)
+        (frame {natural_f ...}
+               [((array {} [atval:t_f]
+                        : (Array (-> [(Array type_in {Shp natural_in ...}) ...]
+                                     type_out)
                                  {Shp}))
-                 expr:t_argcell ...
-                 : type_out)
-                ...]
+                 (array {natural_in ...}
+                        [atval:t_cell ...]
+                        : (Array type_in {Shp natural_in ...}))
+                 ...
+                 : type_out) ...]
                : type_app)
-        (side-condition (< 0 (length (term {natural_fn ...}))))
-        (where [{Shp natural_acell ...} ...]
-          [(drop-prefix {Shp natural_fn ...} {Shp natural_arg ...}) ...])
-        ;; A map requires all cell shapes to match the function's input types.
-        (where #t (all [(idx=? idx_in {Shp natural_acell ...}) ...]))
-        (where [natural_csize ...] [(nprod {natural_acell ...}) ...])
-        ;; Build the (nested) list of cells from each array, then transpose it
-        ;; to get the lists of cells that go to each app in the result frame.
-        (where [[[atom:t_argcell ...] ...] ...]
-          (transpose/m [(split [atom:t_arg ...] natural_csize) ...]))
-        (where [[expr:t_argcell ...] ...]
-          [[(array {natural_acell ...} [atom:t_argcell ...]
-                   : (Array type_in idx_in)) ...] ...])
+        (where #t (all [(idx=? {Shp natural_f ...} {Shp natural_f0 ...}) ...]))
+        (side-condition (< 0 (length (term {natural_f ...}))))
+        (where (((atval:t_cell ...) ...) ...)
+          (transpose/m ((split [atval:t_a ...] (nprod {natural_in ...})) ...)))
         map]
    [==> ((array {} [(λ [var ...] expr:t : type_00)]
                 : (Array (-> [type_in ...] type_01) {Shp}))
