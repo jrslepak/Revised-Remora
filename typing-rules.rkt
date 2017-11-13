@@ -40,7 +40,7 @@
           (expr:t expr:t ... : type)
           (t-app expr:t type ... : type)
           (i-app expr:t idx ... : type)
-          (unbox (var var expr:t) expr:t : type))
+          (unbox (var ... var expr:t) expr:t : type))
   (val:t var:t
          (array (natural ...) (atom:t ...) : type))
   (AE:t atom:t expr:t)
@@ -143,6 +143,7 @@
    (type-of/expr sort-env kind-env type-env
                  expr type_found expr:t)
    (type-eqv type_found (subst* type [(var idx) ...]))
+   (kind-of sort-env kind-env (Σ [(var sort) ...] type) Atom)
    --- type-box
    (type-of/atom sort-env kind-env type-env
                  (box idx ... expr (Σ [(var sort) ...] type))
