@@ -7,22 +7,25 @@
 (define-extended-language Remora-erased Remora-annotated
   (atom:e base-val
           op
-          (λ ((x type:e) ...) expr:e)
-          (Iλ ((x sort) ...) val:e)
+          (λ (var ...) expr:e)
+          (Iλ (var ...) val:e)
           (box idx ... expr:e type:e))
   (atval:e base-val
            op
-           (λ ((x type:e) ...) expr:e)
-           (Iλ ((x sort) ...) val:e)
+           (λ (var ...) expr:e)
+           (Iλ (var ...) val:e)
            (box idx ... val:e type:e))
   (expr:e var
           (array {natural ...} [atom:e ...])
           (array {natural ...} [expr:e ...])
-          (expr:e expr:e ... type:e)
+          ;; Function application: this function array, applied to these
+          ;; argument arrays, construed with these cell shapes, producing this
+          ;; end result type.
+          (expr:e (expr:e :: type:e) ... : type:e)
           (i-app expr:e idx ... type:e)
           (unbox (var ... var expr:e) expr:e))
   (val:e var
-         (array {natural ...} atval:e ...))
+         (array {natural ...} [atval:e ...]))
   (type:e flat
           (Σ [(var sort) ...] type:e)
           (Array type:e idx)))
@@ -42,7 +45,7 @@
   [(erase-atom base-val) base-val]
   [(erase-atom op) op]
   [(erase-atom (λ [var ...] expr:t : (-> [type_in ...] type_out)))
-   (λ [(var (erase-type type_in)) ...] (erase-expr expr:t))]
+   (λ [var ...] (erase-expr expr:t))]
   [(erase-atom (tλ [var ...] val:t : type))
    (erase-atom val:t)]
   [(erase-atom (iλ [var ...] val:t : type))
@@ -58,7 +61,9 @@
   [(erase-expr (frame {natural ...} [expr:t ...] : type))
    (frame {natural ...} [(erase-expr expr:t) ...])]
   [(erase-expr (expr:t_f expr:t_a ... : type))
-   ((erase-expr expr:t_f) (erase-expr expr:t_a) ... : (erase-type type))]
+   ((erase-expr expr:t_f) [(erase-expr expr:t_a) :: (erase-type type_in)] ...
+                          : (erase-type type))
+   (where (_ ... : (Array (-> [type_in ...] _) _)) expr:t_f)]
   [(erase-expr (t-app expr:t_f type_a ... : type))
    (erase-expr expr:t_f)]
   [(erase-expr (i-app expr:t_f idx_a ... : type))
