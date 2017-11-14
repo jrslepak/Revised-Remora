@@ -28,7 +28,28 @@
          (array {natural ...} [atval:e ...]))
   (type:e flat
           (Σ [(var sort) ...] type:e)
-          (Array type:e idx)))
+          (Array type:e idx))
+  (E:e hole
+       (val:e ... E:e expr:e ...)
+       (i-app E:e idx ...)
+       (box idx ... E:e : type:e)
+       (unbox (var_i ... var_e E:e) expr:e)
+       (unbox (var_i ... var_e val:e) E:e)))
+
+(define ->R:e
+  (reduction-relation
+   Remora-erased
+   #:domain expr:e
+   [==> ((array {} [(λ (var ...) expr:e)])
+         (val:e :: (Array _ idx_cell)) ...
+         : type:e)
+        (subst* expr:e [(var (array {natural ...} [atval:e ...])) ...])
+        (where [(array {natural ...} [atval:e ...]) ...] [val:e ...])
+        (where #t (all [(idx=? {Shp natural ...} idx_cell) ...]))
+        β]
+   with
+   [(--> (in-hole E:e a) (in-hole E:e b))
+    (==> a b)]))
 
 (define-metafunction Remora-erased
   erase-type : type -> type:e
