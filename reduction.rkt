@@ -9,10 +9,9 @@
 
 (define-extended-language Remora-exec Remora-annotated
   (E hole
-     (E expr:t)
-     (val:t E)
-     (t-app E type : type)
-     (i-app E idx : type)
+     (val:t ... E expr:t ...)
+     (t-app E type ... : type)
+     (i-app E idx ... : type)
      (box idx ... E : type)
      (unbox (var ... var E) expr:t : type)
      (unbox (var ... var val:t) E : type)))
