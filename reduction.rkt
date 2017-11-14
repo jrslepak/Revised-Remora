@@ -300,12 +300,6 @@
   nprod/s : {Shp natural ...} -> natural
   [(nprod/s {Shp natural ...}) (nprod (natural ...))])
 
-;;; Boolean product of a list
-(define-metafunction Remora-exec
-  all : (boolean ...) -> boolean
-  [(all (_ ... #f _ ...)) #f]
-  [(all _) #t])
-
 ;;; Append many lists
 (define-metafunction Remora-exec
   concat : ((any ...) ...) -> (any ...)

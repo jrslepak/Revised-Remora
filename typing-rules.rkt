@@ -7,7 +7,7 @@
          elaborate elaborate/env unelaborate
          drop-prefix drop-suffix largest-frame
          normalize-idx normalize-indices
-         subst* subst:t subst:t*)
+         subst* subst:t subst:t* all)
 
 (module+ test
   (require rackunit)
@@ -840,3 +840,9 @@
    (Σ [(var sort) ...] (normalize-indices type))]
   [(normalize-indices (Array type idx))
    (Array (normalize-indices type) (normalize-idx idx))])
+
+;;; Boolean product of a list
+(define-metafunction Remora-annotated
+  all : (boolean ...) -> boolean
+  [(all (_ ... #f _ ...)) #f]
+  [(all _) #t])
