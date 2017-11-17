@@ -10,12 +10,12 @@
           op
           (λ (var ...) expr:e)
           (Iλ (var ...) val:e)
-          (box idx ... expr:e type:e))
+          (box idx ... expr:e))
   (atval:e base-val
            op
            (λ (var ...) expr:e)
            (Iλ (var ...) val:e)
-           (box idx ... val:e type:e))
+           (box idx ... val:e))
   (expr:e var
           (array {natural ...} [atom:e ...])
           ;; A frame construct gets marked with its entire type, not just its
@@ -32,7 +32,7 @@
   (val:e var
          (array {natural ...} [atval:e ...]))
   (type:e flat
-          (Σ [(var sort) ...] type:e)
+          (Σ (var ...) type:e)
           (Array type:e idx))
   (E:e hole
        (E:e (expr:e :: type:e) ... : type:e)
@@ -42,7 +42,7 @@
               : type:e)
        ;(val:e ... E:e expr:e ... : type:e)
        (i-app E:e idx ...)
-       (box idx ... E:e : type:e)
+       (box idx ... E:e)
        (unbox (var_i ... var_e E:e) expr:e)
        (unbox (var_i ... var_e val:e) E:e)))
 
@@ -121,6 +121,11 @@
                [(array _ [atval:e ...]) ...])
         (array {natural_fc ...} (concat ([atval:e ...] ...)))
         collapse]
+   [==> (unbox (var_i ... var_e (array {} [(box idx ... val:e)]))
+          expr:e)
+        (subst* (substitute expr:e var_e val:e)
+                [(var_i idx) ...])
+        let-box]
    with
    [(--> (in-hole E:e a) (in-hole E:e b))
     (==> a b)]))
@@ -186,11 +191,31 @@
        (λ ()
          (i-app (array {} [iota]) (++ {Shp 5} {Shp 2 3})
                 : (Array flat (++ {Shp 5} {Shp 2 3})))))])))
+  ;; Test for collapse step
+  (check-step
+   (term (frame (Array flat {Shp 2 3})
+                [(array {3} [10 20 30])
+                 (array {3} [40 50 60])]))
+   (term (array {2 3} [10 20 30 40 50 60])))
+  ;; Test for collapse step, with an empty frame
+  (check-step
+   (term (frame (Array flat {Shp 2 0 3}) []))
+   (term (array {2 0 3} [])))
+  ;; Test for let-box step
+  (check-step
+   (term (unbox (z m (scl:e (box 3 (array {3 3} [1 2 3 4 5 6 7 8 9]))))
+           ((i-app (scl:e length) z {Shp z} : (Array flat {Shp}))
+            (m :: (Array flat {Shp 3 3}))
+            : (Array flat {Shp}))))
+   (term ((i-app (scl:e length) 3 {Shp 3} : (Array flat {Shp}))
+          ((array {3 3} [1 2 3 4 5 6 7 8 9])
+           :: (Array flat {Shp 3 3}))
+          : (Array flat {Shp})))))
 
 (define-metafunction Remora-erased
   erase-type : type -> type:e
   [(erase-type (Array type idx)) (Array (erase-type type) idx)]
-  [(erase-type (Σ [(var sort) ...] type:e)) (Σ [(var sort) ...] (erase-type type))]
+  [(erase-type (Σ [(var sort) ...] type:e)) (Σ (var ...) (erase-type type))]
   [(erase-type (Π _ type)) (erase-type type)]
   [(erase-type (∀ _ type)) (erase-type type)]
   [(erase-type var) flat]
@@ -208,7 +233,7 @@
   [(erase-atom (iλ [var ...] val:t : type))
    (iλ [var ...] (erase-atom val:t))]
   [(erase-atom (box idx ... expr:t : type))
-   (box idx ... (erase-expr expr:t) (erase-type type))])
+   (box idx ... (erase-expr expr:t))])
 
 (define-metafunction Remora-erased
   erase-expr : expr:t -> expr:e
