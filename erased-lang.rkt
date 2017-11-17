@@ -117,6 +117,10 @@
         ;; TODO: do shapes need to be normalized after substitution?
         (frame type:e [(subst* val:e [(var idx) ...]) ...])
         iβ]
+   [==> (frame (Array type:e_c {Shp natural_fc ...})
+               [(array _ [atval:e ...]) ...])
+        (array {natural_fc ...} (concat ([atval:e ...] ...)))
+        collapse]
    with
    [(--> (in-hole E:e a) (in-hole E:e b))
     (==> a b)]))
@@ -181,7 +185,7 @@
      [(scl:e
        (λ ()
          (i-app (array {} [iota]) (++ {Shp 5} {Shp 2 3})
-                : (Array flat (++ {Shp 5} {Shp 2 3})))))]))))
+                : (Array flat (++ {Shp 5} {Shp 2 3})))))])))
 
 (define-metafunction Remora-erased
   erase-type : type -> type:e
