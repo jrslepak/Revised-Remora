@@ -1,7 +1,7 @@
 #lang racket
 
 (require redex
-         ;"language.rkt"
+         "list-utils.rkt"
          "typing-rules.rkt")
 
 (define-extended-language Remora-erased Remora-annotated
