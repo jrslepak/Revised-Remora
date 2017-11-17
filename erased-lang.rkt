@@ -17,12 +17,16 @@
            (box idx ... val:e type:e))
   (expr:e var
           (array {natural ...} [atom:e ...])
-          (array {natural ...} [expr:e ...])
+          ;; A frame construct gets marked with its entire type, not just its
+          ;; shape. When it's time to collapse the frame, code generated from a
+          ;; well-typed program will always have the right number of cells, and
+          ;; their shapes will always match.
+          (frame type:e [expr:e ...])
           ;; Function application: this function array, applied to these
           ;; argument arrays, construed with these cell shapes, producing this
           ;; end result type.
           (expr:e (expr:e :: type:e) ... : type:e)
-          (i-app expr:e idx ... type:e)
+          (i-app expr:e idx ... : type:e)
           (unbox (var ... var expr:e) expr:e))
   (val:e var
          (array {natural ...} [atval:e ...]))
@@ -30,7 +34,12 @@
           (Σ [(var sort) ...] type:e)
           (Array type:e idx))
   (E:e hole
-       (val:e ... E:e expr:e ...)
+       (E:e (expr:e :: type:e) ... : type:e)
+       (val:e (val:e :: type:e) ...
+              (E:e :: type:e)
+              (expr:e :: type:e) ...
+              : type:e)
+       ;(val:e ... E:e expr:e ... : type:e)
        (i-app E:e idx ...)
        (box idx ... E:e : type:e)
        (unbox (var_i ... var_e E:e) expr:e)
@@ -80,7 +89,7 @@
   [(erase-expr (array {natural ...} [atom:t ...] : type))
    (array {natural ...} [(erase-atom atom:t) ...])]
   [(erase-expr (frame {natural ...} [expr:t ...] : type))
-   (frame {natural ...} [(erase-expr expr:t) ...])]
+   (frame (erase-type type) [(erase-expr expr:t) ...])]
   [(erase-expr (expr:t_f expr:t_a ... : type))
    ((erase-expr expr:t_f) [(erase-expr expr:t_a) :: (erase-type type_in)] ...
                           : (erase-type type))
@@ -91,3 +100,8 @@
    (i-app (erase-expr expr:t_f) idx_a ... : (erase-type type))]
   [(erase-expr (unbox (var_i ... var_e expr:t_s) expr:t_b : type))
    (unbox (var_i ... var_e (erase-expr expr:t_s)) (erase-expr expr:t_b))])
+
+
+(define-metafunction Remora-erased
+    scl:e : atom:e -> expr:e
+    [(scl:e atom:e) (array {} [atom:e])])
