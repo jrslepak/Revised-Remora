@@ -112,6 +112,11 @@
         (where [(array {natural ...} [atval:e ...]) ...] [val:e ...])
         (where #t (all [(idx=? {Shp natural ...} idx_cell) ...]))
         β]
+   [==> (i-app (array {natural_f ...} [(Iλ (var ...) val:e) ...])
+               idx ... : type:e)
+        ;; TODO: do shapes need to be normalized after substitution?
+        (frame type:e [(subst* val:e [(var idx) ...]) ...])
+        iβ]
    with
    [(--> (in-hole E:e a) (in-hole E:e b))
     (==> a b)]))
@@ -158,7 +163,25 @@
    (term ((scl:e +)
           ((scl:e 1) :: (Array flat {Shp}))
           ((array {4} [2 3 5 7]) :: (Array flat {Shp}))
-          : (Array flat {Shp 4})))))
+          : (Array flat {Shp 4}))))
+  ;; Test for iβ step
+  (check-step
+   (term (i-app
+          (scl:e
+           (Iλ (shp len)
+             (scl:e
+              (λ ()
+                (i-app (array {} [iota]) (++ {Shp len} shp)
+                       : (Array flat (++ {Shp len} shp)))))))
+          {Shp 2 3} 5
+          : (Array flat (++ len shp))))
+   (term
+    (frame
+     (Array flat (++ len shp))
+     [(scl:e
+       (λ ()
+         (i-app (array {} [iota]) (++ {Shp 5} {Shp 2 3})
+                : (Array flat (++ {Shp 5} {Shp 2 3})))))]))))
 
 (define-metafunction Remora-erased
   erase-type : type -> type:e
