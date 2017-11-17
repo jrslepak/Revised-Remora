@@ -3,6 +3,7 @@
 (require redex
          "list-utils.rkt"
          "typing-rules.rkt")
+(module+ test (require rackunit))
 
 (define-extended-language Remora-erased Remora-annotated
   (atom:e base-val
@@ -49,9 +50,64 @@
   (reduction-relation
    Remora-erased
    #:domain expr:e
+   ;; These rules pick apart shape annotations in a way that assumes they are
+   ;; all normalized.
+   [==> ((array {natural_f ...}
+                [atval:e_f ...])
+         ((array {natural_a ... natural_i ...}
+                 [atval:e_a ...])
+          :: (Array type:e_i {Shp natural_i ...})) ...
+         : type:e_app)
+        ((array {natural_p ...}
+                (concat (replicate-each
+                         (split [atval:e_f ...] (nprod {natural_f ...}))
+                         natural_fe)))
+         ((array {natural_p ... natural_i ...}
+                 (concat (replicate-each
+                          (split [atval:e_a ...] (nprod {natural_i ...}))
+                          natural_ae)))
+          :: (Array type:e_i {Shp natural_i ...})) ...
+         : type:e_app)
+        (where {Shp natural_p ...}
+          (largest-frame [{Shp natural_f ...} {Shp natural_a ...} ...]))
+        (side-condition
+         (not (term (all [(idx=?
+                           {Shp natural_p ...} {Shp natural_f ...})
+                          (idx=?
+                           {Shp natural_p ...} {Shp natural_a ...}) ...]))))
+        (where [natural_fe natural_ae ...]
+          [(nprod/s
+            (drop-prefix {Shp natural_f ...} {Shp natural_p ...}))
+           (nprod/s
+            (drop-prefix {Shp natural_a ...} {Shp natural_p ...})) ...])
+        lift]
+   ;; Generating the new annotation on the individual cells' app forms requires
+   ;; having already-normalized indices in the original annotations.
+   [==> ((array {natural_f ...} [atval:e_f ...])
+         ((array {natural_f0 ... natural_in ...} [atval:e_a ...])
+          :: (Array type:e_in {Shp natural_in ...}))
+         ...
+         : (Array type:e_out idx_out))
+        (frame
+         (Array type:e_out idx_out)
+         [((array {} [atval:e_f])
+           ((array {natural_in ...}
+                   [atval:e_cell ...])
+            :: (Array type:e_in {Shp natural_in ...})) ...
+           : (Array type:e_out (drop-prefix idx_frame idx_out))) ...])
+        ;; Redex objects to having natural_f appear under two ellipses after
+        ;; being bound under one, so wrap the one-ellipsis version up as a
+        ;; single value.
+        (where idx_frame {Shp natural_f ...})
+        (where #t (all [(idx=? {Shp natural_f ...} {Shp natural_f0 ...}) ...]))
+        (side-condition (< 0 (length (term {natural_f ...}))))
+        (where (((atval:e_cell ...) ...) ...)
+          (transpose/m ((split [atval:e_a ...] (nprod {natural_in ...})) ...)))
+        map]
    [==> ((array {} [(λ (var ...) expr:e)])
          (val:e :: (Array _ idx_cell)) ...
          : type:e)
+        ;; TODO: do shapes need to be normalized after substitution?
         (subst* expr:e [(var (array {natural ...} [atval:e ...])) ...])
         (where [(array {natural ...} [atval:e ...]) ...] [val:e ...])
         (where #t (all [(idx=? {Shp natural ...} idx_cell) ...]))
@@ -59,6 +115,50 @@
    with
    [(--> (in-hole E:e a) (in-hole E:e b))
     (==> a b)]))
+
+(module+ test
+  (define (check-step now next)
+    (check-equal? (apply-reduction-relation ->R:e now) (list next)))
+  ;; Test for lift step
+  (check-step
+   (term
+    ((array {2} [(λ (x) x) (λ (x) x)])
+     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp}))
+     : (Array flat {Shp 2 3})))
+   (term
+    ((array {2 3} [(λ (x) x)
+                   (λ (x) x)
+                   (λ (x) x)
+                   (λ (x) x)
+                   (λ (x) x)
+                   (λ (x) x)])
+     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp}))
+     : (Array flat {Shp 2 3}))))
+  ;; Test for map step
+  (check-step
+   (term
+    ((array {2} [(λ (x) x) (λ (x) x)])
+     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp 3}))
+     : (Array flat {Shp 2 3})))
+   (term (frame (Array flat {Shp 2 3})
+                [((scl:e (λ (x) x))
+                  ((array {3} [1 2 3]) :: (Array flat {Shp 3}))
+                  : (Array flat {Shp 3}))
+                 ((scl:e (λ (x) x))
+                  ((array {3} [4 5 6]) :: (Array flat {Shp 3}))
+                  : (Array flat {Shp 3}))])))
+  ;; Test for β step
+  (check-step
+   (term ((scl:e (λ (xs) ((scl:e +)
+                          ((scl:e 1) :: (Array flat {Shp}))
+                          (xs :: (Array flat {Shp}))
+                          : (Array flat {Shp 4}))))
+          ((array {4} [2 3 5 7]) :: (Array flat {Shp 4}))
+          : (Array flat {Shp 4})))
+   (term ((scl:e +)
+          ((scl:e 1) :: (Array flat {Shp}))
+          ((array {4} [2 3 5 7]) :: (Array flat {Shp}))
+          : (Array flat {Shp 4})))))
 
 (define-metafunction Remora-erased
   erase-type : type -> type:e
