@@ -1,6 +1,7 @@
 #lang racket
 
 (require redex
+         "language.rkt"
          "list-utils.rkt"
          "typing-rules.rkt")
 (module+ test (require rackunit))
@@ -223,13 +224,12 @@
   [(erase-type base-type) flat])
 
 (define-metafunction Remora-erased
+  ;; Note: There is no case for tλ because they cannot be erased in isolation.
   erase-atom : atom:t -> atom:e
   [(erase-atom base-val) base-val]
   [(erase-atom op) op]
   [(erase-atom (λ [var ...] expr:t : (-> [type_in ...] type_out)))
    (λ [var ...] (erase-expr expr:t))]
-  [(erase-atom (tλ [var ...] val:t : type))
-   (erase-atom val:t)]
   [(erase-atom (iλ [var ...] val:t : type))
    (iλ [var ...] (erase-atom val:t))]
   [(erase-atom (box idx ... expr:t : type))
@@ -238,6 +238,12 @@
 (define-metafunction Remora-erased
   erase-expr : expr:t -> expr:e
   [(erase-expr (var : type)) var]
+  ;; Arrays of type abstractions must be handled specially to skip ahead to the
+  ;; form they'll have after the no-op type application. If the original is a
+  ;; value, this should turn into a collapse redex.
+  [(erase-expr (array {natural ...} [(tλ (var ...) expr:t) ...] : type))
+   (frame (erase-type type) [(erase-expr expr:t) ...])]
+  ;; For arrays of anything else, just treat them naively.
   [(erase-expr (array {natural ...} [atom:t ...] : type))
    (array {natural ...} [(erase-atom atom:t) ...])]
   [(erase-expr (frame {natural ...} [expr:t ...] : type))
