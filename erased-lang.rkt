@@ -23,12 +23,12 @@
           ;; shape. When it's time to collapse the frame, code generated from a
           ;; well-typed program will always have the right number of cells, and
           ;; their shapes will always match.
-          (frame type:e [expr:e ...])
+          (frame idx [expr:e ...])
           ;; Function application: this function array, applied to these
           ;; argument arrays, construed with these cell shapes, producing this
           ;; end result type.
-          (expr:e (expr:e :: type:e) ... : type:e)
-          (i-app expr:e idx ... : type:e)
+          (expr:e (expr:e :: idx) ... : idx)
+          (i-app expr:e idx ... : idx)
           (unbox (var ... var expr:e) expr:e))
   (val:e var
          (array {natural ...} [atval:e ...]))
@@ -36,12 +36,12 @@
           (Σ (var ...) type:e)
           (Array type:e idx))
   (E:e hole
-       (E:e (expr:e :: type:e) ... : type:e)
-       (val:e (val:e :: type:e) ...
-              (E:e :: type:e)
-              (expr:e :: type:e) ...
-              : type:e)
-       ;(val:e ... E:e expr:e ... : type:e)
+       (E:e (expr:e :: idx) ... : idx)
+       (val:e (val:e :: idx) ...
+              (E:e :: idx)
+              (expr:e :: idx) ...
+              : idx)
+       ;(val:e ... E:e expr:e ... : idx)
        (i-app E:e idx ...)
        (box idx ... E:e)
        (unbox (var_i ... var_e E:e) expr:e)
@@ -57,8 +57,8 @@
                 [atval:e_f ...])
          ((array {natural_a ... natural_i ...}
                  [atval:e_a ...])
-          :: (Array type:e_i {Shp natural_i ...})) ...
-         : type:e_app)
+          :: {Shp natural_i ...}) ...
+         : idx_app)
         ((array {natural_p ...}
                 (concat (replicate-each
                          (split [atval:e_f ...] (nprod {natural_f ...}))
@@ -67,8 +67,8 @@
                  (concat (replicate-each
                           (split [atval:e_a ...] (nprod {natural_i ...}))
                           natural_ae)))
-          :: (Array type:e_i {Shp natural_i ...})) ...
-         : type:e_app)
+          :: {Shp natural_i ...}) ...
+         : idx_app)
         (where {Shp natural_p ...}
           (largest-frame [{Shp natural_f ...} {Shp natural_a ...} ...]))
         (side-condition
@@ -86,16 +86,16 @@
    ;; having already-normalized indices in the original annotations.
    [==> ((array {natural_f ...} [atval:e_f ...])
          ((array {natural_f0 ... natural_in ...} [atval:e_a ...])
-          :: (Array type:e_in {Shp natural_in ...}))
+          :: {Shp natural_in ...})
          ...
-         : (Array type:e_out idx_out))
+         : idx_out)
         (frame
-         (Array type:e_out idx_out)
+         idx_out
          [((array {} [atval:e_f])
            ((array {natural_in ...}
                    [atval:e_cell ...])
-            :: (Array type:e_in {Shp natural_in ...})) ...
-           : (Array type:e_out (drop-prefix idx_frame idx_out))) ...])
+            :: {Shp natural_in ...}) ...
+           : (drop-prefix idx_frame idx_out)) ...])
         ;; Redex objects to having natural_f appear under two ellipses after
         ;; being bound under one, so wrap the one-ellipsis version up as a
         ;; single value.
@@ -106,19 +106,19 @@
           (transpose/m ((split [atval:e_a ...] (nprod {natural_in ...})) ...)))
         map]
    [==> ((array {} [(λ (var ...) expr:e)])
-         (val:e :: (Array _ idx_cell)) ...
-         : type:e)
+         (val:e :: idx_cell) ...
+         : idx)
         ;; TODO: do shapes need to be normalized after substitution?
         (subst* expr:e [(var (array {natural ...} [atval:e ...])) ...])
         (where [(array {natural ...} [atval:e ...]) ...] [val:e ...])
         (where #t (all [(idx=? {Shp natural ...} idx_cell) ...]))
         β]
    [==> (i-app (array {natural_f ...} [(Iλ (var ...) val:e) ...])
-               idx ... : type:e)
+               idx_a ... : idx_f)
         ;; TODO: do shapes need to be normalized after substitution?
-        (frame type:e [(subst* val:e [(var idx) ...]) ...])
+        (frame idx_f [(subst* val:e [(var idx_a) ...]) ...])
         iβ]
-   [==> (frame (Array type:e_c {Shp natural_fc ...})
+   [==> (frame {Shp natural_fc ...}
                [(array _ [atval:e ...]) ...])
         (array {natural_fc ...} (concat ([atval:e ...] ...)))
         collapse]
@@ -132,14 +132,14 @@
     (==> a b)]))
 
 (module+ test
-  (define (check-step now next)
+  (define-syntax-rule (check-step now next)
     (check-equal? (apply-reduction-relation ->R:e now) (list next)))
   ;; Test for lift step
   (check-step
    (term
     ((array {2} [(λ (x) x) (λ (x) x)])
-     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp}))
-     : (Array flat {Shp 2 3})))
+     ((array {2 3} [1 2 3 4 5 6]) :: {Shp})
+     : {Shp 2 3}))
    (term
     ((array {2 3} [(λ (x) x)
                    (λ (x) x)
@@ -147,33 +147,33 @@
                    (λ (x) x)
                    (λ (x) x)
                    (λ (x) x)])
-     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp}))
-     : (Array flat {Shp 2 3}))))
+     ((array {2 3} [1 2 3 4 5 6]) :: {Shp})
+     : {Shp 2 3})))
   ;; Test for map step
   (check-step
    (term
     ((array {2} [(λ (x) x) (λ (x) x)])
-     ((array {2 3} [1 2 3 4 5 6]) :: (Array flat {Shp 3}))
-     : (Array flat {Shp 2 3})))
-   (term (frame (Array flat {Shp 2 3})
+     ((array {2 3} [1 2 3 4 5 6]) :: {Shp 3})
+     : {Shp 2 3}))
+   (term (frame {Shp 2 3}
                 [((scl:e (λ (x) x))
-                  ((array {3} [1 2 3]) :: (Array flat {Shp 3}))
-                  : (Array flat {Shp 3}))
+                  ((array {3} [1 2 3]) :: {Shp 3})
+                  : {Shp 3})
                  ((scl:e (λ (x) x))
-                  ((array {3} [4 5 6]) :: (Array flat {Shp 3}))
-                  : (Array flat {Shp 3}))])))
+                  ((array {3} [4 5 6]) :: {Shp 3})
+                  : {Shp 3})])))
   ;; Test for β step
   (check-step
    (term ((scl:e (λ (xs) ((scl:e +)
-                          ((scl:e 1) :: (Array flat {Shp}))
-                          (xs :: (Array flat {Shp}))
-                          : (Array flat {Shp 4}))))
-          ((array {4} [2 3 5 7]) :: (Array flat {Shp 4}))
-          : (Array flat {Shp 4})))
+                          ((scl:e 1) :: {Shp})
+                          (xs :: {Shp})
+                          : {Shp 4})))
+          ((array {4} [2 3 5 7]) :: {Shp 4})
+          : {Shp 4}))
    (term ((scl:e +)
-          ((scl:e 1) :: (Array flat {Shp}))
-          ((array {4} [2 3 5 7]) :: (Array flat {Shp}))
-          : (Array flat {Shp 4}))))
+          ((scl:e 1) :: {Shp})
+          ((array {4} [2 3 5 7]) :: {Shp})
+          : {Shp 4})))
   ;; Test for iβ step
   (check-step
    (term (i-app
@@ -181,50 +181,49 @@
            (Iλ (shp len)
              (scl:e
               (λ ()
-                (i-app (array {} [iota]) (++ {Shp len} shp)
-                       : (Array flat (++ {Shp len} shp)))))))
+                (i-app (array {} [iota]) {++ {Shp len} shp}
+                       : {++ {Shp len} shp})))))
           {Shp 2 3} 5
-          : (Array flat (++ len shp))))
+          : {++ len shp}))
    (term
     (frame
-     (Array flat (++ len shp))
+     {++ len shp}
      [(scl:e
        (λ ()
-         (i-app (array {} [iota]) (++ {Shp 5} {Shp 2 3})
-                : (Array flat (++ {Shp 5} {Shp 2 3})))))])))
+         (i-app (array {} [iota]) {++ {Shp 5} {Shp 2 3}}
+                : {++ {Shp 5} {Shp 2 3}})))])))
   ;; Test for collapse step
   (check-step
-   (term (frame (Array flat {Shp 2 3})
+   (term (frame {Shp 2 3}
                 [(array {3} [10 20 30])
                  (array {3} [40 50 60])]))
    (term (array {2 3} [10 20 30 40 50 60])))
   ;; Test for collapse step, with an empty frame
   (check-step
-   (term (frame (Array flat {Shp 2 0 3}) []))
+   (term (frame {Shp 2 0 3} []))
    (term (array {2 0 3} [])))
   ;; Test for let-box step
   (check-step
    (term (unbox (z m (scl:e (box 3 (array {3 3} [1 2 3 4 5 6 7 8 9]))))
-           ((i-app (scl:e length) z {Shp z} : (Array flat {Shp}))
-            (m :: (Array flat {Shp 3 3}))
-            : (Array flat {Shp}))))
-   (term ((i-app (scl:e length) 3 {Shp 3} : (Array flat {Shp}))
+           ((i-app (scl:e length) z {Shp z} : {Shp})
+            (m :: {Shp 3 3})
+            : {Shp})))
+   (term ((i-app (scl:e length) 3 {Shp 3} : {Shp})
           ((array {3 3} [1 2 3 4 5 6 7 8 9])
-           :: (Array flat {Shp 3 3}))
-          : (Array flat {Shp})))))
+           :: {Shp 3 3})
+          : {Shp}))))
 
 (define-metafunction Remora-erased
-  erase-type : type -> type:e
-  [(erase-type (Array type idx)) (Array (erase-type type) idx)]
-  [(erase-type (Σ [(var sort) ...] type:e)) (Σ (var ...) (erase-type type))]
-  [(erase-type (Π _ type)) (erase-type type)]
-  [(erase-type (∀ _ type)) (erase-type type)]
-  [(erase-type var) flat]
-  [(erase-type (-> _ _)) flat]
-  [(erase-type base-type) flat])
+  erase-type : type -> idx
+  [(erase-type var) var]
+  [(erase-type (Array type idx)) (normalize-idx {++ (erase-type type) idx})]
+  [(erase-type (∀ _ type)) {Shp}]
+  [(erase-type (Σ _ _)) {Shp}]
+  [(erase-type (Π _ _)) {Shp}]
+  [(erase-type (-> _ _)) {Shp}]
+  [(erase-type base-type) {Shp}])
 
 (define-metafunction Remora-erased
-  ;; Note: There is no case for tλ because they cannot be erased in isolation.
   erase-atom : atom:t -> atom:e
   [(erase-atom base-val) base-val]
   [(erase-atom op) op]
@@ -232,31 +231,31 @@
    (λ [var ...] (erase-expr expr:t))]
   [(erase-atom (iλ [var ...] val:t : type))
    (iλ [var ...] (erase-atom val:t))]
+  ;; Type abstractions become index abstractions, which only bind the index
+  ;; information carried by what was originally a type argument.
+  [(erase-atom (tλ [var ...] val:t : type))
+   (iλ [var ...] (erase-atom val:t))]
   [(erase-atom (box idx ... expr:t : type))
    (box idx ... (erase-expr expr:t))])
 
 (define-metafunction Remora-erased
   erase-expr : expr:t -> expr:e
   [(erase-expr (var : type)) var]
-  ;; Arrays of type abstractions must be handled specially to skip ahead to the
-  ;; form they'll have after the no-op type application. If the original is a
-  ;; value, this should turn into a collapse redex.
-  [(erase-expr (array {natural ...} [(tλ (var ...) expr:t) ...] : type))
-   (frame (erase-type type) [(erase-expr expr:t) ...])]
-  ;; For arrays of anything else, just treat them naively.
-  [(erase-expr (array {natural ...} [atom:t ...] : type))
+  [(erase-expr (array {natural ...} [atom:t ...] : type_r))
    (array {natural ...} [(erase-atom atom:t) ...])]
-  [(erase-expr (frame {natural ...} [expr:t ...] : type))
+  [(erase-expr (frame {natural ...} [expr:t ...] : type_r))
    (frame (erase-type type) [(erase-expr expr:t) ...])]
-  [(erase-expr (expr:t_f expr:t_a ... : type))
+  [(erase-expr (expr:t_f expr:t_a ... : type_r))
    ((erase-expr expr:t_f) [(erase-expr expr:t_a) :: (erase-type type_in)] ...
-                          : (erase-type type))
+                          : (erase-type type_r))
    (where (_ ... : (Array (-> [type_in ...] _) _)) expr:t_f)]
-  [(erase-expr (t-app expr:t_f type_a ... : type))
-   (erase-expr expr:t_f)]
-  [(erase-expr (i-app expr:t_f idx_a ... : type))
-   (i-app (erase-expr expr:t_f) idx_a ... : (erase-type type))]
-  [(erase-expr (unbox (var_i ... var_e expr:t_s) expr:t_b : type))
+  ;; Corresponding to the conversion of type abstractions to index abstractions,
+  ;; type application passes only the index information a type contains.
+  [(erase-expr (t-app expr:t_f type_a ... : type_r))
+   (i-app (erase-expr expr:t_f) (erase-type type_a) ... : (erase-type type_r))]
+  [(erase-expr (i-app expr:t_f idx_a ... : type_r))
+   (i-app (erase-expr expr:t_f) idx_a ... : (erase-type type_r))]
+  [(erase-expr (unbox (var_i ... var_e expr:t_s) expr:t_b : type_r))
    (unbox (var_i ... var_e (erase-expr expr:t_s)) (erase-expr expr:t_b))])
 
 
