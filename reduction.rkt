@@ -13,7 +13,7 @@
      (val:t ... E expr:t ...)
      (t-app E type ... : type)
      (i-app E idx ... : type)
-     (box idx ... E : type)
+     (array (natural ...) atval:t ... (box idx ... E : type) atom:t ...)
      (unbox (var ... var E) expr:t : type)
      (unbox (var ... var val:t) E : type)))
 
