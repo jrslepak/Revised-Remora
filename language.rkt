@@ -81,7 +81,7 @@
   (λ [(var type) ...] expr #:refers-to (shadow var ...))
   (tλ [(var kind) ...] val #:refers-to (shadow var ...))
   (iλ [(var sort) ...] val #:refers-to (shadow var ...))
-  (Unbox (var_i ... var_e expr) expr #:refers-to (shadow var_i ... var_e))
+  (unbox (var_i ... var_e expr) expr #:refers-to (shadow var_i ... var_e))
   (∀ [(var kind) ...] type #:refers-to (shadow var ...))
   (Π [(var sort) ...] type #:refers-to (shadow var ...))
   (Σ [(var sort) ...] type #:refers-to (shadow var ...)))
@@ -168,7 +168,7 @@
                            (Scl
                             (-> [(Array t s)]
                                 (Scl (Σ [(r Dim)] (Array Int {Shp r}))))))))]
-  [(op->type reduce) (&∀ [(t Atom)]
+  [(op->type reduce) (∀ [(t Atom)]
                          (&Π [(l Dim) (f Shape) (c Shape)]
                              (&-> [(&-> [(Array t c) (Array t c)] (Array t c))
                                    (Array t {++ f c})
