@@ -44,8 +44,7 @@
        ;(val:e ... E:e expr:e ... : idx)
        (i-app E:e idx ...)
        (box idx ... E:e)
-       (unbox (var_i ... var_e E:e) expr:e)
-       (unbox (var_i ... var_e val:e) E:e)))
+       (unbox (var_i ... var_e E:e) expr:e)))
 
 (define ->R:e
   (reduction-relation
