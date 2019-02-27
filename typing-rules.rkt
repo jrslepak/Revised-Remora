@@ -814,9 +814,7 @@
    {+ natural ... var_sorted ...}
    (where {var_sorted ...}
      ,(sort (term {var ...}) symbol<?))]
-  [(normalize-idx {++ idx_0 ...
-                        {++ idx_1 ...}
-                        idx_2 ...})
+  [(normalize-idx {++ idx_0 ... {++ idx_1 ...} idx_2 ...})
    (normalize-idx {++ idx_0 ... idx_1 ... idx_2 ...})]
   [(normalize-idx {++ idx_0 ... {Shp idx_1 ...} {Shp idx_2 ...} idx_3 ...})
    (normalize-idx {++ idx_0 ... {Shp idx_1 ... idx_2 ...} idx_3 ...})]
