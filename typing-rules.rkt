@@ -355,25 +355,25 @@
                  (i-app expr:t idx_arg ... : type_subbed))]
   [(type-of/expr sort-env kind-env type-env
                  expr_box
-                 type_box
+                 (Array type_box idx_box)
                  expr:t_box)
-   (where (Array (Σ [(var_sum sort) ...] type_contents) {Shp}) type_box)
+   (where (Σ [(var_sum sort) ...] type_contents) type_box)
    (type-of/expr (update sort-env [(var_i sort) ...])
                  kind-env
                  (update type-env [(var_e (normalize-indices
                                            (subst* type_contents
                                                    [(var_sum var_i) ...])))])
                  expr_body
-                 type_body
+                 (Array type_body idx_body)
                  expr:t_body)
-   (kind-of sort-env kind-env type_body Array)
+   (kind-of sort-env kind-env (Array type_body idx_body) Array)
    --- type-unbox
    (type-of/expr sort-env kind-env type-env
                  (unbox [var_i ... var_e expr_box] expr_body)
-                 type_body
+                 (Array type_body (normalize-idx {++ idx_box idx_body}))
                  (unbox [var_i ... var_e expr:t_box]
                    expr:t_body
-                   : type_body))])
+                   : (Array type_body (normalize-idx {++ idx_box idx_body}))))])
 
 (module+ test
   ;; Variable type lookup

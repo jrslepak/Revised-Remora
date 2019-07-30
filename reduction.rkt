@@ -121,10 +121,12 @@
                : (Array type {Shp natural ...}))
         collapse]
    [==> (unbox (var_i ... var_e
-                      (array {} [(box idx ... expr:t_box : type_box)] : _))
+                      (array {natural ...} [(box idx ... expr:t_box : type_box) ...] : _))
           expr:t_body : type_out)
-        (subst* (subst:t expr:t_body var_e expr:t_box)
-                [(var_i idx) ...])
+        (frame {natural ...}
+               [(subst* (subst:t expr:t_body var_e expr:t_box)
+                        [(var_i idx) ...]) ...]
+               : type_out)
         let-box]
    with
    [(--> (in-hole E a) (in-hole E b))
@@ -232,8 +234,20 @@
    (term (unbox [l a (scl (box 3 (array {2 3} [1 2 3 4 5 6])
                                (Σ [(d Dim)] (Array Int {Shp 2 d}))))]
            ((i-app (t-app (scl length) Int) l {Shp}) a)))
-   (list (term ((i-app (t-app (scl length) Int) 3 {Shp})
-                (array {2 3} [1 2 3 4 5 6]))))))
+   (list (term (frame {}
+                      [((i-app (t-app (scl length) Int) 3 {Shp})
+                        (array {2 3} [1 2 3 4 5 6]))]))))
+  (check-step
+   (term (unbox [l a (array {2} [(box 3 (array {3} [1 2 3])
+                                      (Σ [(d Dim)] (Array Int {Shp d})))
+                                 (box 3 (array {3} [4 5 6])
+                                      (Σ [(d Dim)] (Array Int {Shp d})))])]
+           ((i-app (t-app (scl length) Int) l {Shp}) a)))
+   (list (term (frame {2}
+                      [((i-app (t-app (scl length) Int) 3 {Shp})
+                        (array {3} [1 2 3]))
+                       ((i-app (t-app (scl length) Int) 3 {Shp})
+                        (array {3} [4 5 6]))])))))
 
 
 (define-metafunction Remora-exec
