@@ -47,20 +47,29 @@
   (base-type Int Bool)
   (kind Array Atom)
   ;; Index level
-  (dim dvar natural {+ dim ...})
-  (ndim adim {+ adim adim ...+})
-  (adim dvar natural)
-  (shp svar {Shp dim ...} {++ shp ...})
-  (nshp fshp {++ fshp fshp ...+} {Shp})
-  (fshp svar {Shp ndim ndim ...+})
-  (idx dim shp)
-  (nidx ndim nshp)
+  (dim dvar natural {+ dim ...})        ; any dimension
+  (ndim adim {+ adim adim ...+})        ; normalized dimension
+  (adim dvar natural)                   ; atomic dimensions
+  (shp svar {Shp dim ...} {++ shp ...}) ; any shape
+  (nshp fshp {++ fshp fshp ...+} {Shp}) ; normalized shape
+  (fshp svar {Shp ndim ndim ...+})      ; flat shape
+  (idx dim shp)                         ; any index
+  (nidx ndim nshp)                      ; normalized index
   (sort Dim Shape)
   ;; Type inference environment structure
   (env (env-entry ...))
   (env-entry (evar arrtype)
+             ;; Universal var, unsolved existential var, solved existential var
              tvar (^ tvar) (^ tvar type)
-             ivar (^ ivar) (^ ivar idx))
+             ivar (^ ivar) (^ ivar idx)
+             ;; Scope marker
+             (?i var))
+  ;; Archive of facts discovered about exvars (used like environment, but don't
+  ;; delete things right when exvars go out of scope)
+  (archive (archive-entry ...))
+  (archive-entry (≐ dim dim ...+)
+                 (^ tvar) (^ tvar type)
+                 (^ ivar) (^ tvar idx))
   #:binding-forms
   (λ [(evar spec) ...] expr #:refers-to (shadow evar ...))
   (unbox (ivar ... evar expr) expr #:refers-to (shadow ivar ... evar))
