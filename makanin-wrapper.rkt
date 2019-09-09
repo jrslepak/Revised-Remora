@@ -7,6 +7,7 @@
          "elab-lang.rkt"
          (for-syntax syntax/parse
                      racket/syntax))
+(provide solutions)
 (module+ test
   (require rackunit))
 
@@ -86,9 +87,7 @@
   ;; Convert the equivalence relation on sequence element ID numbers into an
   ;; equivalence relation on syntactically encoded dims, and translate the
   ;; assignment so that its codomain is syntactic dims instead of ID numbers.
-  ;; TODO: How to choose which element of the right equivalence class to use for
-  ;; each position in a sequence variable's assigned value? What if no possible
-  ;; value is entirely in scope when the sequence var is introduced?
+  ;; TODO: Try case where ^svar solution depends on later-bound ^dvars.
   ;; For example: [^@s, ..., ^$d, ^$e]  with ^@s resolved to one of {^$d, ^$e}
   ;; What substitution works for ^@s where ^$d and ^$e are not yet in scope?
   ;; Maybe add new exvar elements to the environment right before ^@s, similar
@@ -106,45 +105,6 @@
                 (define sym->id-list (first s))
                 (define id-eqv-reln (second s))
                 (update-env env archive id->idx sym->id-list id-eqv-reln)))
-  #;
-  (define translated-solns
-    (for/stream ([s solns])
-                (printf "Solver's candidate solution:\n~v\n\n" s)
-                (define assignment (first s))
-                (define id-eqv-reln (second s))
-                (define translated-eqv-reln
-                  (for/list ([id-eqv-class id-eqv-reln])
-                            (for/list ([id id-eqv-class])
-                                      (define val (hash-ref (first id-tables) id))
-                                      (if (hash? val)
-                                          (coeff-hash->dim val)
-                                          val))))
-                (define dim-eqv-reln
-                  (if (for/or ([eqv-class translated-eqv-reln])
-                              (and (for/or ([d eqv-class]) (svar? d))
-                                   (> (length eqv-class) 1)))
-                      #f
-                      translated-eqv-reln))
-                (printf "Equivalence relation on IDs:\n~v\n\n"
-                        id-eqv-reln)
-                (printf "Translated equivalence relation:\n~v\n\n"
-                        translated-eqv-reln)
-                (if dim-eqv-reln
-                    (let* ([_ (printf "Equivalence relation on dims:\n~v\n\n"
-                                      dim-eqv-reln)]
-                           [archive/new-eqv-reln
-                               (append (for/list ([dim-eqv-class dim-eqv-reln])
-                                                 (cons '≐ dim-eqv-class))
-                                       archive)]
-                           [env/dvar-solutions
-                            (resolve-dvars env dim-eqv-reln)]
-                           [env/solutions
-                            (resolve-svars/rev (reverse env/dvar-solutions)
-                                           assignment
-                                           id-eqv-reln
-                                           (first id-tables))])
-                      (list env/dvar-solutions archive/new-eqv-reln))
-                    #f)))
   translated-solns)
 (module+ test
   (check-equal? (stream-first (solutions (term [(^ $x) (^ $y) (^ @s)])

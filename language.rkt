@@ -37,6 +37,21 @@
         (unbox (var ... var expr) expr))
   ;; "atom or expr," used for some convenience/utility metafunctions
   (AE atom expr)
+  ;; Syntactic contexts
+  (actx hole
+        (λ [(var type) ...] ectx)
+        (tλ [(var kind) ...] ectx)
+        (iλ [(var sort) ...] ectx)
+        (box idx ... ectx type)
+        (tuple expr ... ectx expr ...))
+  (ectx hole
+        (array {natural ...} [atom ... actx atom ...])
+        (frame {natural ...} [expr ... ectx expr ...])
+        (expr ... ectx expr ...)
+        (t-app ectx type ...)
+        (i-app ectx idx ...)
+        (unbox (var ... var ectx) expr)
+        (unbox (var ... var expr) ectx))
   ;; Add more primops as they are needed.
   ;; TODO: how to handle curried primops?
   (op + - * and or not > < =
@@ -62,6 +77,7 @@
        natural
        {Shp idx ...}
        {+ idx ...}
+       #;{- idx ...}
        {++ idx ...})
   (sort Dim Shape)
   ;; Environment structure

@@ -1,6 +1,7 @@
 #lang racket
 
 (require redex
+         "language.rkt"
          "elab-lang.rkt"
          "inez-wrapper.rkt"
          "makanin-wrapper.rkt")
@@ -120,6 +121,134 @@
                env_1 archive_1
                (array {natural ...} [e:atom ...]))])
 
+;;;;----------------------------------------------------------------------------
+;;;; Judgments related to subtyping (as instantiability)
+;;;;----------------------------------------------------------------------------
+;; Note: Coercing an atom doesn't necessarily work like coercing an array.
+;; Consider a vector containing a polymorphic function and a monomorphic
+;; function. We need that polymorphic function to become monomorphic, but the
+;; only monomorphization forms in Remora are type and index application. Those
+;; live in the realm of arrays, not atoms. All we can do to make an atom from
+;; an atom is η expansion.
+#;     [id inc]
+;; must be η expanded to
+#;   [(λ (y (Array Int {Shp})) (id y))
+      inc]
+;; which must further elaborate to
+#;   [(λ (y (Array Int {Shp}))
+        ((t-app (array {} [id])
+                (Array Int {Shp}))
+         y))
+      inc]
+;; For user-written λ, this maybe isn't so bad, since we'd end up with
+;; something like
+#;     [(λ ((x *T)) x) inc]
+;; elaborating to
+#;   [(λ (y (Array Int {Shp}))
+        ((t-app (array {} [(tλ [*T] (λ ((x *T)) x))])
+                (Array Int {Shp}))
+         y))
+      inc]
+;; This contains a tβ redex, which should be safe to reduce at compile time
+#;   [(λ (y (Array Int {Shp}))
+        ((array {} [(λ ((x (Array Int {Shp}))) x)]) y))
+      inc]
+;; Then η reduction (which is less permissive in Remora than STLC) gives
+#;   [(λ ((x (Array Int {Shp}))) x)
+      inc]
+;; And that's only if we were somehow directed to ascribe a polymorphic type
+;; to that identity function. Without such a directive, we should type it as
+;; (-> [(^ @T)] (^ @T)), with @T eventually resolving as (Array Int {Shp}). We
+;; thus avoid the η round trip.
+(define-judgment-form Remora-elab
+  #:mode (subtype/atom I I I I O O O)
+  #:contract (subtype/atom env archive atmtype atmtype env archive e:actx)
+  [(subtype/atom env archive base-type base-type env archive hole)
+   sub-base])
+(define-judgment-form Remora-elab
+  #:mode (subtype/expr I I I I O O O)
+  ;; TODO: Is syntactic context too general? maybe just T-App/I-App coercions?
+  #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
+  [;; TODO: check whether shapes are equalizable instead of just being
+   ;; syntactically equal after normalization
+   (side-condition ,(equal? (term (Inormalize-idx shp_0))
+                            (term (Inormalize-idx shp_1))))
+   --- sub-exvar
+   (subtype/expr
+    env archive
+    (Array base-type shp_0)
+    (Array base-type shp_1)
+    env archive
+    hole)]
+  [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
+   --- sub-base
+   (subtype/expr
+    env_0 archive_0
+    (Array base-type shp_0)
+    (Array base-type shp_1)
+    env_1 archive_1
+    hole)]
+  [;; TODO: check whether shapes are equalizable instead of just being
+   ;; syntactically equal after normalization
+   (side-condition ,(equal? (term (Inormalize-idx shp_0))
+                            (term (Inormalize-idx shp_1))))
+   --- sub-atmvar
+   (subtype/expr
+    env archive
+    (Array atmvar shp_0)
+    (Array atmvar shp_1)
+    env archive
+    hole)]
+  [(subtype/expr env archive arrvar arrvar env archive hole)
+   sub-arrvar]
+  [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
+   (subtype/atom
+    [env-entry_0 ... (?i var_sm) (^ tvar) ...] archive_0
+    (subst* atmtype_0 [(tvar (^ tvar)) ...])
+    atmtype_1
+    env_1 archive_1
+    actx)
+   --- sub-forallL
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array (∀ [tvar ...] atmtype_0) shp_0)
+    (Array atmtype_1 shp_1)
+    env_1 archive_1
+    ?)]
+  ;; As a "last resort" rule, we can conclude [T_1 S_1] <: [T_2 S_2] by making
+  ;; sure T_1 <: T_2 and S_1 ≐ S_2. The resulting coercion will be ugly. It must
+  ;; apply an η-expanded version of the atom coercion.
+  ;; TODO: Is this ever actually needed?
+  [(subtype/atom env_0 archive_0 atmtype_0 atmtype_1 env_1 archive_1 e:actx)
+   (equate env_1 archive_1 shp_0 shp_1 env_2 archive_2)
+   (where var_f ,(gensym 'coerce))
+   --- sub-array
+   (subtype/expr env_0 archive_0
+                 (Array atmtype_0 shp_0)
+                 (Array atmtype_1 shp_1)
+                 env_2 archive_2
+                 ((scl (λ [(coerce (Scl atmtype_0))] (in-hole e:actx coerce)))
+                  hole))])
+
+;;; Provide a judgment-form version of the logic used to interpret the solver's
+;;; results
+(define-judgment-form Remora-elab
+  #:mode (equate I I I I O O)
+  #:contract (equate env archive idx idx env archive)
+  ;; Ask an ILP solver whether dim_0 and dim_1 can be equated and what values
+  ;; must be assigned to their unsolved existential variables in order to do so.
+  [(where (_ ... (env_1 archive_1) _ ...)
+     (equate-shapes env_0 archive_0 shp_0 shp_1))
+   --- equate-shp
+   (equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)]
+  [--- equate-dim
+   (equate env archive dim dim env archive)])
+;;; Metafunction wrapper for solver call
+(define-metafunction Remora-elab
+  equate-shapes : env archive shp shp -> [(env archive) ...]
+  [(equate-shapes env archive shp_0 shp_1)
+   ,(stream->list (solutions (term env) (term archive)
+                             (term shp_0) (term shp_1)))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Helper judgments for typing lists of terms all at the same type
