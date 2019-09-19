@@ -23,16 +23,16 @@
   [(check/atom env_0 archive_0
                atom atmtype
                env_1 archive_1 e:atom)
-   --- syn-annot
+   --- syn:annot
    (synth/atom env_0 archive_0
                (atom : atmtype) atmtype
                env_1 archive_1 e:atom)]
   [(synth/atom env archive integer Int env archive integer)
-   syn-int]
+   syn:int]
   [(synth/atom env archive boolean Bool env archive boolean)
-   syn-bool]
+   syn:bool]
   [(synth/atom env archive op (op->Itype op) env archive op)
-   syn-op])
+   syn:op])
 
 (define-judgment-form Remora-elab
   #:mode (synth/expr I I I O O O O)
@@ -57,7 +57,7 @@
                 _ ...]
                archive_2
                e:expr_b)
-   --- syn-unbox
+   --- syn:unbox
    (synth/expr [env-entry_0 ...]
                archive_0
                (unbox (ivar ... evar expr_s) expr_b)
@@ -66,15 +66,15 @@
                archive_2
                (unbox (ivar ... evar e:expr_s) e:expr_b))]
   [(check/expr env_0 archive_0 expr arrtype env_1 archive_1 e:expr)
-   --- syn-annot
+   --- syn:annot
    (synth/expr env_0 archive_0 (expr : arrtype) arrtype env_1 archive_1 e:expr)]
   [(where (_ ... (evar arrtype) _ ...) env)
-   --- syn-var
+   --- syn:var
    (synth/expr env archive evar arrtype env archive evar)]
   [(synth/atoms env_0 archive_0
                 (atom ...) atmtype
                 env_1 archive_1 [e:atom ...])
-   --- syn-array
+   --- syn:array
    (synth/expr env_0 archive_0
                (array {natural ...} [atom ...])
                (Array atmtype {Shp natural ...})
@@ -85,7 +85,7 @@
                 env_1 archive_1 [e:expr ...])
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (expr ...)))))
-   --- syn-frame
+   --- syn:frame
    (synth/expr env_0 archive_0
                (frame {natural ...} [expr ...])
                (Array atmtype
@@ -112,7 +112,7 @@
   [(check/atoms env_0 archive_0 [atom ...] atmtype env_1 archive_1 [e:atom ...])
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (atom ...)))))
-   --- chk-array
+   --- chk:array
    (check/expr env_0 archive_0
                (array {natural ...} [atom ...])
                (Array atmtype
@@ -169,30 +169,17 @@
   #:mode (subtype/expr I I I I O O O)
   ;; TODO: Is syntactic context too general? maybe just T-App/I-App coercions?
   #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
-  [;; TODO: check whether shapes are equalizable instead of just being
-   ;; syntactically equal after normalization
-   (side-condition ,(equal? (term (Inormalize-idx shp_0))
-                            (term (Inormalize-idx shp_1))))
-   --- sub-exvar
-   (subtype/expr
-    env archive
-    (Array base-type shp_0)
-    (Array base-type shp_1)
-    env archive
-    hole)]
+  ;; TODO: Should these three (base/atmvar/arrvar) be subsumed by a refl rule?
   [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
-   --- sub-base
+   --- sub:base
    (subtype/expr
     env_0 archive_0
     (Array base-type shp_0)
     (Array base-type shp_1)
     env_1 archive_1
     hole)]
-  [;; TODO: check whether shapes are equalizable instead of just being
-   ;; syntactically equal after normalization
-   (side-condition ,(equal? (term (Inormalize-idx shp_0))
-                            (term (Inormalize-idx shp_1))))
-   --- sub-atmvar
+  [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
+   --- sub:atmvar
    (subtype/expr
     env archive
     (Array atmvar shp_0)
@@ -208,7 +195,7 @@
     atmtype_1
     env_1 archive_1
     actx)
-   --- sub-forallL
+   --- sub:∀L
    (subtype/expr
     [env-entry_0 ...] archive_0
     (Array (∀ [tvar ...] atmtype_0) shp_0)
@@ -221,8 +208,7 @@
   ;; TODO: Is this ever actually needed?
   [(subtype/atom env_0 archive_0 atmtype_0 atmtype_1 env_1 archive_1 e:actx)
    (equate env_1 archive_1 shp_0 shp_1 env_2 archive_2)
-   (where var_f ,(gensym 'coerce))
-   --- sub-array
+   --- sub:Array
    (subtype/expr env_0 archive_0
                  (Array atmtype_0 shp_0)
                  (Array atmtype_1 shp_1)
@@ -520,9 +506,9 @@
   ;; must be assigned to their unsolved existential variables in order to do so.
   [(where (_ ... (env_1 archive_1) _ ...)
      (equate-shapes env_0 archive_0 shp_0 shp_1))
-   --- equate-shp
+   --- equate:shp
    (equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)]
-  [--- equate-dim
+  [--- equate:dim
    (equate env archive dim dim env archive)])
 ;;; Metafunction wrapper for solver call
 (define-metafunction Remora-elab
@@ -538,7 +524,7 @@
   #:mode (synth/atoms I I I O O O O)
   #:contract (synth/atoms env archive [atom ...+] atmtype env archive [e:atom ...+])
   [(synth/atom env_0 archive_0 atom atmtype env_1 archive_1 e:atom)
-   --- syn*-base
+   --- syn*:base
    (synth/atoms env_0 archive_0 [atom] atmtype env_1 archive_1 [e:atom])]
   [(synth/atom env_0 archive_0 atom_0 atmtype_join env_1 archive_1 e:atom_0)
    (synth/atoms env_1 archive_1 [atom_1 ...] atmtype_join env_n archive_n [e:atom_1 ...])
@@ -551,7 +537,7 @@
   #:mode (synth/exprs I I I O O O O)
   #:contract (synth/exprs env archive [expr ...+] arrtype env archive [e:expr ...+])
   [(synth/expr env_0 archive_0 expr arrtype env_1 archive_1 e:expr)
-   --- syn*-base
+   --- syn*:base
    (synth/exprs env_0 archive_0 [expr] arrtype env_1 archive_1 [e:expr])]
   [(synth/expr env_0 archive_0 expr_0 arrtype_join env_1 archive_1 e:expr_0)
    (synth/exprs env_1 archive_1 [expr_1 ...] arrtype_join env_n archive_n [e:expr_1 ...])
@@ -563,8 +549,8 @@
 (define-judgment-form Remora-elab
   #:mode (check/atoms I I I I O O O)
   #:contract (check/atoms env archive [atom ...] atmtype env archive [e:atom ...])
-  [(check/atoms env archive [] _ env archive [])
-   chk*-base]
+  [--- chk*:base
+   (check/atoms env archive [] _ env archive [])]
   [(check/atom env_0 archive_0 atom_0 atmtype env_1 archive_1 e:atom_0)
    (check/atoms env_1 archive_1 [atom_1 ...] atmtype env_n archive_n [e:atom_1 ...])
    --- chk*
@@ -575,8 +561,8 @@
 (define-judgment-form Remora-elab
   #:mode (check/exprs I I I I O O O)
   #:contract (check/exprs env archive [expr ...] arrtype env archive [e:expr ...])
-  [(check/exprs env archive [] _ env archive [])
-   chk*-base]
+  [--- chk*:base
+   (check/exprs env archive [] _ env archive [])]
   [(check/expr env_0 archive_0 expr_0 arrtype env_1 archive_1 e:expr_0)
    (check/exprs env_1 archive_1 [expr_1 ...] arrtype env_n archive_n [e:expr_1 ...])
    --- chk*
