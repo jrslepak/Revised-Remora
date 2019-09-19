@@ -4,7 +4,7 @@
 (provide Remora-implicit
          IScl Iscl I&-> I&Π I&Σ I&∀ I&
          op->Itype
-         Inormalize-idx)
+         #;Inormalize-idx)
 
 (define-language Remora-implicit
   (var variable-not-otherwise-mentioned)
@@ -41,9 +41,13 @@
            (∀ [tvar ...] arrtype)
            (Π [ivar ...] arrtype)
            (Σ [ivar ...] arrtype))
+  ;; TODO: Should type vars be allowed to stand for Π/Σ types?
+  (atmmono atmvar base-type (-> [arrtype ...] arrtype))
   (arrtype arrvar
            (Array atmtype shp))
+  (arrmono arrvar (Array atmmono shp))
   (type atmtype arrtype)
+  (monotype atmmono arrmono)
   (base-type Int Bool)
   (kind Array Atom)
   ;; Index level
@@ -155,31 +159,3 @@
                           (I&Π [$r @old]
                                (I&-> [(Array Int {Shp $r}) (Array &t @old)]
                                       (I&Σ [@new] (Array &t @new))))))])
-
-(define-metafunction Remora-implicit
-  Inormalize-idx : idx -> nidx
-  [(Inormalize-idx natural) natural]
-  [(Inormalize-idx ivar) ivar]
-  [(Inormalize-idx {Shp dim ...})
-   {Shp (Inormalize-idx dim) ...}]
-  [(Inormalize-idx {+ dim_0 ... {+ dim_1 ...} dim_2 ...})
-   (Inormalize-idx {+ dim_0 ... dim_1 ... dim_2 ...})]
-  [(Inormalize-idx {+ dim_0 ... natural_0 dim_1 ... natural_1 dim_2 ...})
-   (Inormalize-idx {+ ,(+ (term natural_0) (term natural_1))
-                      dim_0 ... dim_1 ... dim_2 ...})]
-  [(Inormalize-idx {+ dim_0 dim_1 ... natural dim_2 ...})
-   (Inormalize-idx {+ natural dim_0 dim_1 ... dim_2 ...})]
-  [(Inormalize-idx {+ dim}) dim]
-  [(Inormalize-idx {+}) 0]
-  [(Inormalize-idx {+ natural dvar ...})
-   {+ natural dvar_sorted ...}
-   (where {dvar_sorted ...}
-     ,(sort (term {dvar ...}) symbol<?))]
-  [(Inormalize-idx {++ shp_0 ... {++ shp_1 ...} shp_2 ...})
-   (Inormalize-idx {++ shp_0 ... shp_1 ... shp_2 ...})]
-  [(Inormalize-idx {++ shp_0 ... {Shp dim_0 ...} {Shp dim_1 ...} shp_1 ...})
-   (Inormalize-idx {++ shp_0 ... {Shp dim_0 ... dim_1 ...} shp_1 ...})]
-  [(Inormalize-idx {++ {Shp dim ...}})
-   {Shp dim ...}]
-  [(Inormalize-idx {++}) {Shp}]
-  [(Inormalize-idx {++ dim ...}) {++ dim ...}])

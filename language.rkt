@@ -2,7 +2,7 @@
 
 (require redex)
 (provide Remora-explicit
-         Scl scl &-> &Π &Σ &∀ &
+         #;Scl #;scl &-> &Π &Σ &∀ &
          op->type)
 
 ;;; TODO: Specialized forms of polymorphic primops should be treated as primops.
