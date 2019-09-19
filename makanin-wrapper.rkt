@@ -57,7 +57,8 @@
   (and (for/and ([c dim-eqv-reln]) (list? c))
        ;; At this point, we know the equivalence relation only relates dims with
        ;; dims and universal shape variables with themselves.
-       (let* ([sym->idx-list (translate-soln sym->id-list id->idx id-eqv-reln)]
+       (let* (;; TODO: How to handle partially constrained existential svars?
+              [sym->idx-list (translate-soln sym->id-list id->idx id-eqv-reln)]
               #;[_ (printf "Index solution structure:\n~v\n\n" sym->idx-list)]
               [env/dvars (resolve-dvars env dim-eqv-reln)]
               [env/svars (resolve-svars env/dvars sym->idx-list)]
@@ -78,7 +79,10 @@
   (define id->coeff-hash (first id-tables))
   (define id->idx
     (for/hash ([(id hash-idx) id->coeff-hash])
-              (values id (coeff-hash->dim hash-idx))))
+              (values id
+                      (if (hash? hash-idx)
+                          (coeff-hash->dim hash-idx)
+                          hash-idx))))
   (define idx->id (second id-tables))
   #;(printf "SeqElt ID table:\n~v\n\n" (first id-tables))
   (define solns
@@ -107,6 +111,18 @@
                 (update-env env archive id->idx sym->id-list id-eqv-reln)))
   translated-solns)
 (module+ test
+  (check-equal? (stream->list (solutions '[] '[] '{Shp} '{Shp}))
+                '(([] ())))
+  (check-equal? (stream->list (solutions '[] '[] '{Shp 4} '{Shp 4}))
+                '(([] ())))
+  (check-equal? (stream->list (solutions '[(^ @s)] '[] '(^ @s) '{Shp}))
+                '(([(^ @s (Shp))]
+                   [])))
+  (check-equal? (stream->list (solutions '[(^ @s)] '[] '(^ @s) '{Shp 5}))
+                '(([(^ @s (Shp 5))]
+                   [])))
+  (check-equal? (stream->list (solutions '[@s] '[] '@s '{Shp}))
+                '())
   (check-equal? (stream-first (solutions (term [(^ $x) (^ $y) (^ @s)])
                                          (term [])
                                          (term {Shp (^ $x) (^ $y)})
@@ -438,7 +454,7 @@
                          s)))
   #;(printf "Specific pieces: ~v\n" specific-pieces)
   (and (for/and ([s specific-pieces]) s)
-       specific-pieces))
+       (term (Inormalize-idx ,(cons '++ specific-pieces)))))
 
 ;;; Construct the set of index variables mentioned in a shape
 ;;; Shp -> [Set IVar]
@@ -491,7 +507,7 @@
      (define component-solns (hash-ref svar->idx-list v #f))
      #;(printf "  Components' candidate solutions: ~v\n" component-solns)
      (define shp-soln
-       (if component-solns (resolve-svar forbidden-vars component-solns) '()))
+       (if component-solns (list (resolve-svar forbidden-vars component-solns)) '()))
      (if shp-soln
          (cons (append (first rev-env) shp-soln)
                (resolve-svars/rev rest-env
@@ -521,9 +537,13 @@
 ;;; [Hash Nat Idx]
 ;;; [Listof [Set Nat]]
 ;;; -> [Hash SVar [Listof [Set Shp]]
+;;; TODO: This will misbehave if an existential shape variable is only partially
+;;; (not fully) constrained. It effectively forgets all constraints placed on
+;;; the shape.
 (define (translate-soln id-soln id->idx id-eqv-reln)
   (for/hash
-   ([(svar ids) id-soln])
+   ([(svar ids) id-soln]
+    #:when (for/and ([id ids]) id))
    (values
     svar
     (for/list ([id ids])
