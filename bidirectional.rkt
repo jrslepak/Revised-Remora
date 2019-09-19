@@ -164,7 +164,19 @@
   #:mode (subtype/atom I I I I O O O)
   #:contract (subtype/atom env archive atmtype atmtype env archive e:actx)
   [(subtype/atom env archive base-type base-type env archive hole)
-   sub-base])
+   sub-base]
+  [;; TODO: occurs check
+   (instL/atom env_0 archive_0 exatmvar atmtype env_1 archive_1 e:actx)
+   --- sub:instL/atom
+   (subtype/atom env_0 archive_0
+                 exatmvar atmtype
+                 env_1 archive_1 e:actx)]
+  [;; TODO: occurs check
+   (instR/atom env_0 archive_0 atmtype exatmvar env_1 archive_1 e:actx)
+   --- sub:instR/atom
+   (subtype/atom env_0 archive_0
+                 atmtype exatmvar
+                 env_1 archive_1 e:actx)])
 (define-judgment-form Remora-elab
   #:mode (subtype/expr I I I I O O O)
   ;; TODO: Is syntactic context too general? maybe just T-App/I-App coercions?
@@ -181,31 +193,62 @@
   [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
    --- sub:atmvar
    (subtype/expr
-    env archive
+    env_0 archive_0
     (Array atmvar shp_0)
     (Array atmvar shp_1)
-    env archive
+    env_1 archive_1
     hole)]
   [(subtype/expr env archive arrvar arrvar env archive hole)
    sub-arrvar]
+  [(equate env_0 archive_0 shp_fl shp_fh env_1 archive_1)
+   (subtype/exprs env_0 archive_0
+                  [arrtype_inh ...] [arrtype_inl ...]
+                  env_1 archive_1 [e:ectx_in ...])
+   (subtype/expr env_1 archive_1
+                 arrtype_outl arrtype_outh
+                 env_2 archive_2 e:ectx_out)
+   --- sub:->
+   (subtype/expr env_0 archive_0
+                 (Array (-> [arrtype_inl ...] arrtype_outl) shp_fl)
+                 (Array (-> [arrtype_inh ...] arrtype_outh) shp_fh)
+                 env_2 archive_2
+                 (fn-coercion [arrtype_inl ...] [arrtype_inh ...]
+                              [e:ectx_in ...] e:ectx_out))]
   [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
-   (subtype/atom
+   (subtype/expr
+    ;; Convert the argument type variable into an existential tvar
     [env-entry_0 ... (?i var_sm) (^ tvar) ...] archive_0
-    (subst* atmtype_0 [(tvar (^ tvar)) ...])
-    atmtype_1
-    env_1 archive_1
-    actx)
+    (Array (subst* atmtype_lo [(tvar (^ tvar)) ...]) {++ shp_f shp_c})
+    (Array atmtype_hi shp_hi)
+    env_1 archive_1 e:ectx)
+   (where [env-entry_1 ... (?i var_sm)_ ...] env_1)
    --- sub:∀L
    (subtype/expr
     [env-entry_0 ...] archive_0
-    (Array (∀ [tvar ...] atmtype_0) shp_0)
-    (Array atmtype_1 shp_1)
-    env_1 archive_1
-    ?)]
-  ;; As a "last resort" rule, we can conclude [T_1 S_1] <: [T_2 S_2] by making
-  ;; sure T_1 <: T_2 and S_1 ≐ S_2. The resulting coercion will be ugly. It must
-  ;; apply an η-expanded version of the atom coercion.
-  ;; TODO: Is this ever actually needed?
+    (Array (∀ [tvar ...] (Array atmtype_lo shp_c)) shp_f)
+    (Array atmtype_hi shp_hi)
+    [env-entry_1 ...] archive_1
+    (apply-env/e:ectx env_1 (in-hole e:ectx (t-app hole (^ tvar) ...))))]
+  [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
+   (subtype/expr
+    ;; Convert the argument type variable into an existential tvar
+    [env-entry_0 ... (?i var_sm) (^ ivar) ...] archive_0
+    (Array (subst* atmtype_lo [(ivar (^ ivar)) ...]) {++ shp_f shp_c})
+    (Array atmtype_hi shp_hi)
+    env_1 archive_1 e:ectx)
+   (where [env-entry_1 ... (?i var_sm)_ ...] env_1)
+   --- sub:ΠL
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array (Π [ivar ...] (Array atmtype_lo shp_c)) shp_f)
+    (Array atmtype_hi shp_hi)
+    [env-entry_1 ...] archive_1
+    (apply-env/e:ectx env_1 (in-hole e:ectx (i-app hole (^ ivar) ...))))]
+  ;; After destructuring the atom type as much as possible, we can conclude that
+  ;; [T_1 S_1] <: [T_2 S_2] by making sure T_1 <: T_2 and S_1 ≐ S_2. The
+  ;; resulting coercion will be ugly. It must apply an η-expanded version of the
+  ;; atom coercion (but there doesn't seem to be much that can be done with atom
+  ;; coercions because atom-level computation is so restricted).
   [(subtype/atom env_0 archive_0 atmtype_0 atmtype_1 env_1 archive_1 e:actx)
    (equate env_1 archive_1 shp_0 shp_1 env_2 archive_2)
    --- sub:Array
@@ -499,6 +542,8 @@
 
 ;;; Provide a judgment-form version of the logic used to interpret the solver's
 ;;; results
+;;; TODO: Add "trimming" rules that match up dim* prefixes or suffixes so they
+;;; don't have to be dealt with by the solver.
 (define-judgment-form Remora-elab
   #:mode (equate I I I I O O)
   #:contract (equate env archive idx idx env archive)
@@ -568,6 +613,35 @@
    --- chk*
    (check/exprs env_0 archive_0 [expr_0 expr_1 ...] arrtype
                 env_n archive_n [e:expr_0 e:expr_1 ...])])
+
+;;; Lift an atom coercion to an array coercion that performs the atom coercion
+;;; on each atom in the array.
+(define-metafunction Remora-elab
+  lift-atom-coercion : e:actx -> e:ectx
+  [(lift-atom-coercion hole) hole]
+  [(lift-atom-coercion e:actx) ((scl (λ [(coerce (Scl atmtype))]
+                                       (in-hole e:actx coerce)))
+                                hole)])
+
+;;; Construct a function coercion from the input and output coercions
+(define-metafunction Remora-elab
+  fn-coercion : [arrtype ...] [arrtype ...] [e:ectx ...] e:ectx -> e:actx
+  [(fn-coercion _ _ [hole ...] hole) hole]
+  [(fn-coercion [arrtype_inl ...] [arrtype_inh ...]
+                [e:ectx_in ...] e:ectx_out)
+   ((array
+     ()
+     [(λ [(f (Array (-> [arrtype_inl ...] arrtype_outl)
+                    {Shp}))]
+        (array
+         ()
+         [(λ [(var_fresh arrtype_inh) ...]
+            (in-hole
+             e:ectx_out
+             (f (in-hole e:ectx_in var_fresh) ...)))]))])
+    hole)
+   (where [var_fresh ...]
+     ,(build-list (length (term (arrtype_inh ...))) (λ _ (gensym 'ARG_))))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Helper judgments for instantiating lists of terms
