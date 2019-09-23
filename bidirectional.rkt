@@ -31,7 +31,22 @@
   [(synth/atom env archive boolean Bool env archive boolean)
    syn:bool]
   [(synth/atom env archive op (op->Itype op) env archive op)
-   syn:op])
+   syn:op]
+  [(where var_sm ,(gensym 'SM_))
+   (where [[env-entry_exvar ... (var arrtype_generated)] ...]
+     [(arg-env-entries (var spec)) ...])
+   (where [env-entry_new ...]
+     ,(apply append (term [[env-entry_exvar ... (var arrtype_generated)] ...])))
+   (synth/expr [env-entry_0 ... (?i var_sm) env-entry_new ...] archive_0
+               expr arrtype_out
+               env_1 archive_1 e:expr)
+   (where [env-entry_1 ... (?i var_sm) _ ...] env_1)
+   --- syn:λ
+   (synth/atom [env-entry_0 ...] archive_0
+               (λ [(var spec) ...] expr)
+               (-> [arrtype_generated ...] arrtype_out)
+               [env-entry_1 ...] archive_1
+               (λ [(var (elab-type arrtype_generated)) ...] e:expr))])
 
 (define-judgment-form Remora-elab
   #:mode (synth/expr I I I O O O O)
@@ -102,7 +117,49 @@
    --- chk:sub/atom
    (check/atom env_0 archive_0
                atom atmtype_hi
-               env_2 archive_2 (in-hole e:actx e:atom))])
+               env_2 archive_2 (in-hole e:actx e:atom))]
+  [(where var_sm ,(gensym 'SM_))
+   (where [[env-entry_exvar ... (var arrtype_generated)] ...]
+     [(arg-env-entries (var spec)) ...])
+   (where [env-entry_new ...]
+     ,(apply append (term [[env-entry_exvar ... (var arrtype_generated)] ...])))
+   (subtype/exprs [env-entry_0 ... (?i var_sm) env-entry_new ...] archive_0
+                  [arrtype_in ...]
+                  [arrtype_generated ...]
+                  env_1 archive_1 [e:ectx_in ...])
+   (check/expr env_1 archive_1
+               expr arrtype_out
+               env_2 archive_2 e:expr)
+   (where [env-entry_2 ... (?i var_sm) _ ...] env_2)
+   --- chk:λ
+   (check/atom [env-entry_0 ...] archive_0
+               (λ [(var spec) ...] expr)
+               (-> [arrtype_in ...] arrtype_out)
+               [env-entry_2 ...] archive_2
+               (apply-env/e:atom env_2
+                (λ [(var (elab-type arrtype_generated)) ...]
+                  (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))])
+
+
+
+;;; Generate the new environment entries associated with a λ's argument name
+;;; and spec. If the a type spec is given, we only need a single env-entry
+;;; binding the variable at that type. If we have a natural rank, generate the
+;;; appropriate number of existential dimension variables and an existential
+;;; atom variable. For `all' rank, generate an existential shape variable and an
+;;; existential atom variable.
+(define-metafunction Remora-elab
+  arg-env-entries : (var spec) -> [(^ var) ... (var arrtype)]
+  [(arg-env-entries (var arrtype)) [(arg arrtype)]]
+  [(arg-env-entries (var all))
+   [(^ atmvar) (^ svar) (var (Array (^ atmvar) (^ svar)))]
+   (where svar (shp-tag var))
+   (where atmvar (atm-tag var))]
+  [(arg-env-entries (var natural))
+   [(^ atmvar) (^ dvar) ... (var (Array (^ atmvar) {Shp (^ dvar) ...}))]
+   (where [dvar ...]
+     ,(build-list (term natural) (λ (n) (term (dim-tag var ,n)))))
+   (where atmvar (atm-tag var))])
 
 (define-judgment-form Remora-elab
   #:mode (check/expr I I I I O O O)
@@ -673,7 +730,7 @@
   [--- subtype*:base
    (subtype/exprs env archive [] [] env archive [])]
   [(subtype/expr env_0 archive_0 arrtype_l0 arrtype_h0 env_1 archive_1 e:ectx_0)
-   (subtype/exprs env_0 archive_0
+   (subtype/exprs env_1 archive_1
                   [arrtype_l1 ...]
                   [arrtype_h1 ...]
                   env_2 archive_2 [e:ectx_1 ...])
@@ -892,7 +949,8 @@
   [(elab-type (Array type idx))
    (Array (elab-type type) idx)]
   [(elab-type base-type) base-type]
-  [(elab-type var) var])
+  [(elab-type var) var]
+  [(elab-type (^ var)) (^ var)])
 
 (define-metafunction Remora-elab
   tvar->bind : tvar -> (e:var e:kind)
@@ -903,3 +961,24 @@
   ivar->bind : ivar -> (e:var e:sort)
   [(ivar->bind dvar) (dvar Dim)]
   [(ivar->bind svar) (svar Shape)])
+
+
+;;;;----------------------------------------------------------------------------
+;;;; Utility metafunctions for generating variable names visibly associated
+;;;; with some existing term-level variable
+;;;;----------------------------------------------------------------------------
+(define-metafunction Remora-elab
+  dim-tag : var natural -> dvar
+  [(dim-tag var natural)
+   ,(string->symbol (string-append
+                     "$"
+                     (symbol->string (term var))
+                     (number->string (term natural))))])
+(define-metafunction Remora-elab
+  shp-tag : var -> svar
+  [(shp-tag var)
+   ,(string->symbol (string-append "@" (symbol->string (term var))))])
+(define-metafunction Remora-elab
+  atm-tag : var -> atmvar
+  [(atm-tag var)
+   ,(string->symbol (string-append "&" (symbol->string (term var))))])
