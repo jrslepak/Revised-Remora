@@ -98,17 +98,23 @@
   #:mode (check/atom I I I I O O O)
   #:contract (check/atom env archive atom atmtype env archive e:atom)
   ;; TODO: chk-sub, chk-fn, chk-box
-  [(synth/atom env_0 archive_0 atom atmtype env_1 archive_1 e:atom)
-   --- REPLACE-WITH-SUBTYPE-RULE
-   (check/atom env_0 archive_0 atom atmtype env_1 archive_1 e:atom)])
+  [(synth/atom env_0 archive_0 atom atmtype_lo env_1 archive_1 e:atom)
+   (subtype/atom env_1 archive_1 atmtype_lo atmtype_hi env_2 archive_2 e:actx)
+   --- chk:sub/atom
+   (check/atom env_0 archive_0
+               atom atmtype_hi
+               env_2 archive_2 (in-hole e:actx e:atom))])
 
 (define-judgment-form Remora-elab
   #:mode (check/expr I I I I O O O)
   #:contract (check/expr env archive expr arrtype env archive e:expr)
-  ;; TODO: chk-sub
-  [(synth/expr env_0 archive_0 expr arrtype env_1 archive_1 e:expr)
-   --- REPLACE-WITH-SUBTYPE-RULE
-   (check/expr env_0 archive_0 expr arrtype env_1 archive_1 e:expr)]
+  [;; TODO: prune this search path except in "last resort" cases
+   (synth/expr env_0 archive_0 expr arrtype_lo env_1 archive_1 e:expr)
+   (subtype/expr env_1 archive_1 arrtype_lo arrtype_hi env_2 archive_2 e:ectx)
+   --- chk:sub/expr
+   (check/expr env_0 archive_0
+               expr arrtype_hi
+               env_1 archive_1 (in-hole e:ectx e:expr))]
   [(check/atoms env_0 archive_0 [atom ...] atmtype env_1 archive_1 [e:atom ...])
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (atom ...)))))
