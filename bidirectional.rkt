@@ -1,7 +1,6 @@
 #lang racket
 
 (require redex
-         #;"language.rkt"
          "elab-lang.rkt"
          "inez-wrapper.rkt"
          "makanin-wrapper.rkt")
@@ -118,14 +117,28 @@
   [(check/atoms env_0 archive_0 [atom ...] atmtype env_1 archive_1 [e:atom ...])
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (atom ...)))))
+   (equate env_1 archive_1 shp {Shp natural ...} env_2 archive_2)
    --- chk:array
    (check/expr env_0 archive_0
                (array {natural ...} [atom ...])
-               (Array atmtype
-                      ;; TODO: use solver query to be more permissive
-                      (Shp natural ...))
+               (Array atmtype shp)
+               env_2 archive_2
+               (array {natural ...} [e:atom ...]))]
+  [(where exsvar (^ ,(gensym '@CELL_)))
+   (equate [env-entry_0 ... exsvar] archive_0
+           shp {++ {Shp natural ...} exsvar}
+           env_1 archive_1)
+   (check/exprs env_1 archive_1
+                [expr ...] (Array atmtype exsvar)
+                env_2 archive_2 [e:expr ...])
+   (side-condition ,(= (apply * (term (natural ...)))
+                       (length (term (expr ...)))))
+   --- chk:frame
+   (check/expr [env-entry_0 ...] archive_0
+               (frame {natural ...} [expr ...])
+               (Array atmtype shp)
                env_1 archive_1
-               (array {natural ...} [e:atom ...]))])
+               (frame {natural ...} [e:expr ...]))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Judgments related to subtyping (as instantiability)
@@ -184,8 +197,8 @@
                  atmtype exatmvar
                  env_1 archive_1 e:actx)])
 (define-judgment-form Remora-elab
+  ;; TODO: sub:∀R, sub:ΠR, sub:ΣL, sub:ΣR
   #:mode (subtype/expr I I I I O O O)
-  ;; TODO: Is syntactic context too general? maybe just T-App/I-App coercions?
   #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
   ;; TODO: Should these three (base/atmvar/arrvar) be subsumed by a refl rule?
   [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
