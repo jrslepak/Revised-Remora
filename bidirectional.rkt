@@ -3,22 +3,12 @@
 (require redex
          "elab-lang.rkt"
          "inez-wrapper.rkt"
-         "makanin-wrapper.rkt")
-
-;;; Utilities for converting variable-class notation into kind/sort-tag notation
-(define-metafunction Remora-elab
-  sort-tag : ivar -> (e:idx e:sort)
-  [(sort-tag dvar) (dvar Dim)]
-  [(sort-tag svar) (dvar Shape)])
-(define-metafunction Remora-elab
-  kind-tag : tvar -> (e:type e:kind)
-  [(kind-tag atmvar) (atmvar Atom)]
-  [(kind-tag arrvar) (arrvar Array)])
+         "makanin-wrapper.rkt"
+         "well-formedness.rkt")
 
 (define-judgment-form Remora-elab
   #:mode (synth/atom I I I O O O O)
   #:contract (synth/atom env archive atom atmtype env archive e:atom)
-  ;; TODO: syn-fn (optional)
   [(check/atom env_0 archive_0
                atom atmtype
                env_1 archive_1 e:atom)
@@ -141,26 +131,6 @@
                   (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))])
 
 
-
-;;; Generate the new environment entries associated with a λ's argument name
-;;; and spec. If the a type spec is given, we only need a single env-entry
-;;; binding the variable at that type. If we have a natural rank, generate the
-;;; appropriate number of existential dimension variables and an existential
-;;; atom variable. For `all' rank, generate an existential shape variable and an
-;;; existential atom variable.
-(define-metafunction Remora-elab
-  arg-env-entries : (var spec) -> [(^ var) ... (var arrtype)]
-  [(arg-env-entries (var arrtype)) [(arg arrtype)]]
-  [(arg-env-entries (var all))
-   [(^ atmvar) (^ svar) (var (Array (^ atmvar) (^ svar)))]
-   (where svar (shp-tag var))
-   (where atmvar (atm-tag var))]
-  [(arg-env-entries (var natural))
-   [(^ atmvar) (^ dvar) ... (var (Array (^ atmvar) {Shp (^ dvar) ...}))]
-   (where [dvar ...]
-     ,(build-list (term natural) (λ (n) (term (dim-tag var ,n)))))
-   (where atmvar (atm-tag var))])
-
 (define-judgment-form Remora-elab
   #:mode (check/expr I I I I O O O)
   #:contract (check/expr env archive expr arrtype env archive e:expr)
@@ -200,42 +170,6 @@
 ;;;;----------------------------------------------------------------------------
 ;;;; Judgments related to subtyping (as instantiability)
 ;;;;----------------------------------------------------------------------------
-;; Note: Coercing an atom doesn't necessarily work like coercing an array.
-;; Consider a vector containing a polymorphic function and a monomorphic
-;; function. We need that polymorphic function to become monomorphic, but the
-;; only monomorphization forms in Remora are type and index application. Those
-;; live in the realm of arrays, not atoms. All we can do to make an atom from
-;; an atom is η expansion.
-#;     [id inc]
-;; must be η expanded to
-#;   [(λ (y (Array Int {Shp})) (id y))
-      inc]
-;; which must further elaborate to
-#;   [(λ (y (Array Int {Shp}))
-        ((t-app (array {} [id])
-                (Array Int {Shp}))
-         y))
-      inc]
-;; For user-written λ, this maybe isn't so bad, since we'd end up with
-;; something like
-#;     [(λ ((x *T)) x) inc]
-;; elaborating to
-#;   [(λ (y (Array Int {Shp}))
-        ((t-app (array {} [(tλ [*T] (λ ((x *T)) x))])
-                (Array Int {Shp}))
-         y))
-      inc]
-;; This contains a tβ redex, which should be safe to reduce at compile time
-#;   [(λ (y (Array Int {Shp}))
-        ((array {} [(λ ((x (Array Int {Shp}))) x)]) y))
-      inc]
-;; Then η reduction (which is less permissive in Remora than STLC) gives
-#;   [(λ ((x (Array Int {Shp}))) x)
-      inc]
-;; And that's only if we were somehow directed to ascribe a polymorphic type
-;; to that identity function. Without such a directive, we should type it as
-;; (-> [(^ @T)] (^ @T)), with @T eventually resolving as (Array Int {Shp}). We
-;; thus avoid the η round trip.
 (define-judgment-form Remora-elab
   #:mode (subtype/atom I I I I O O O)
   #:contract (subtype/atom env archive atmtype atmtype env archive e:actx)
@@ -553,69 +487,6 @@
                 (lift-atom-coercion e:actx))])
 
 
-;;;;----------------------------------------------------------------------------
-;;;; Type-/index-level well-formedness checks
-;;;;----------------------------------------------------------------------------
-(define-judgment-form Remora-elab
-  #:mode (kind-atm I I)
-  #:contract (kind-atm env type)
-  [--- kind:Base
-   (kind-atm _ base-type)]
-  [(kind-array env arrtype_in) ...
-   (kind-array env arrtype_out)
-   --- kind:fn
-   (kind-atm env (-> [arrtype_in ...] arrtype_out))]
-  [(kind-array (env-entry ... tvar ...) arrtype)
-   --- kind:all
-   (kind-atm (env-entry ...) (∀ [tvar ...] arrtype))]
-  [(kind-array (env-entry ... ivar ...) arrtype)
-   --- kind:pi
-   (kind-atm (env-entry ...) (Π [ivar ...] arrtype))]
-  [(kind-array (env-entry ... ivar ...) arrtype)
-   --- kind:sigma
-   (kind-atm (env-entry ...) (Σ [ivar ...] arrtype))]
-  [--- kind:atmvar
-   (kind-atm [_ ... atmvar _ ...] atmvar)]
-  [--- kind:exatmvar
-   (kind-atm [_ ... exatmvar _ ...] exatmvar)])
-(define-judgment-form Remora-elab
-  #:mode (kind-array I I)
-  #:contract (kind-array env type)
-  [(sort-shp env shp)
-   (kind-atm env atmtype)
-   --- kind:Array
-   (kind-array env (Array atmtype shp))]
-  [--- kind:arrvar
-   (kind-array [_ ... arrvar _ ...] arrvar)]
-  [--- kind:exarrvar
-   (kind-array [_ ... exarrvar _ ...] exarrvar)])
-(define-judgment-form Remora-elab
-  #:mode (sort-shp I I)
-  #:contract (sort-shp env idx)
-  [(sort-dim env dim) ...
-   --- sort:Shp
-   (sort-shp env {Shp dim ...})]
-  [(sort-shp env shp) ...
-   --- sort:++
-   (sort-shp env {++ shp ...})]
-  [--- sort:svar
-   (sort-shp [_ ... svar _ ...] svar)]
-  [--- sort:exsvar
-   (sort-shp [_ ... exsvar _ ...] exsvar)])
-(define-judgment-form Remora-elab
-  #:mode (sort-dim I I)
-  #:contract (sort-dim env idx)
-  [(sort-dim env dim) ...
-   --- sort:+
-   (sort-dim env {+ dim ...})]
-  [--- sort:nat
-   (sort-dim env natural)]
-  [--- sort:dvar
-   (sort-dim [_ ... dvar _ ...] dvar)]
-  [--- sort:exdvar
-   (sort-dim [_ ... exdvar _ ...] exdvar)])
-
-
 ;;; Provide a judgment-form version of the logic used to interpret the solver's
 ;;; results
 ;;; TODO: Add "trimming" rules that match up dim* prefixes or suffixes so they
@@ -690,34 +561,6 @@
    (check/exprs env_0 archive_0 [expr_0 expr_1 ...] arrtype
                 env_n archive_n [e:expr_0 e:expr_1 ...])])
 
-;;; Lift an atom coercion to an array coercion that performs the atom coercion
-;;; on each atom in the array.
-(define-metafunction Remora-elab
-  lift-atom-coercion : e:actx -> e:ectx
-  [(lift-atom-coercion hole) hole]
-  [(lift-atom-coercion e:actx) ((scl (λ [(coerce (Scl atmtype))]
-                                       (in-hole e:actx coerce)))
-                                hole)])
-
-;;; Construct a function coercion from the input and output coercions
-(define-metafunction Remora-elab
-  fn-coercion : [arrtype ...] [arrtype ...] [e:ectx ...] e:ectx -> e:actx
-  [(fn-coercion _ _ [hole ...] hole) hole]
-  [(fn-coercion [arrtype_inl ...] [arrtype_inh ...]
-                [e:ectx_in ...] e:ectx_out)
-   ((array
-     ()
-     [(λ [(f (Array (-> [arrtype_inl ...] arrtype_outl)
-                    {Shp}))]
-        (array
-         ()
-         [(λ [(var_fresh arrtype_inh) ...]
-            (in-hole
-             e:ectx_out
-             (f (in-hole e:ectx_in var_fresh) ...)))]))])
-    hole)
-   (where [var_fresh ...]
-     ,(build-list (length (term (arrtype_inh ...))) (λ _ (gensym 'ARG_))))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Helper judgments for instantiating lists of terms
@@ -803,182 +646,3 @@
    (instR/arrays env_0 archive_0
                  [arrtype_0 arrtype_1 ...] [(^ arrvar_0) (^ arrvar_1) ...]
                  env_2 archive_2 [e:ectx_0 e:ectx_1 ...])])
-
-;;; Simple pattern-check, for where we need to ensure that a match has *failed*.
-(define-metafunction Remora-elab
-  monotype? : any -> boolean
-  [(monotype? monotype) #t]
-  [(monotype? _) #f])
-
-;;;;----------------------------------------------------------------------------
-;;;; Utility metafunctions for multiple substitution
-;;;;----------------------------------------------------------------------------
-(define-metafunction Remora-elab
-  subst* : any [(var any) ...] -> any
-  [(subst* any []) any]
-  [(subst* any_orig [(var any_new) any_subs ...])
-   (subst* (substitute any_orig var any_new) [any_subs ...])])
-
-(define-metafunction Remora-elab
-  apply-env/e:expr : env e:expr -> e:expr
-  [(apply-env/e:expr _ var) var]
-  [(apply-env/e:expr env (array any [e:atom ...]))
-   (array any [(apply-env/e:atom env e:atom) ...])]
-  [(apply-env/e:expr env (array any e:type))
-   (array any (apply-env/e:type e:type))]
-  [(apply-env/e:expr env (frame any [e:expr ...]))
-   (array any [(apply-env/e:expr e:expr) ...])]
-  [(apply-env/e:expr env (frame any e:type))
-   (array any (apply-env/e:type e:type))]
-  [(apply-env/e:expr env (e:expr_f e:expr_a ...))
-   ((apply-env/e:expr env e:expr_f) (apply-env/e:expr env e:expr_a) ...)]
-  [(apply-env/e:expr env (t-app e:expr e:type ...))
-   (t-app (apply-env/e:expr env e:expr) (apply-env/e:type env e:type) ...)]
-  [(apply-env/e:expr env (i-app e:expr e:idx ...))
-   (i-app (apply-env/e:expr env e:expr) (apply-env/e:idx env e:idx) ...)]
-  [(apply-env/e:expr env (unbox (var ... e:expr) e:expr))
-   (unbox (var ... (apply-env/e:expr e:expr)) (apply-env/e:expr e:expr))])
-
-(define-metafunction Remora-elab
-  apply-env/e:ectx : env e:ectx -> e:ectx
-  [(apply-env/e:ectx _ hole) hole]
-  [(apply-env/e:ectx env (array any [e:atom_0 ... e:actx e:atom_1 ...]))
-   (array any [(apply-env/e:atom env e:atom_0) ...
-               (apply-env/e:actx env e:actx)
-               (apply-env/e:atom env e:atom_1) ...])]
-  [(apply-env/e:ectx env (frame any [e:expr_0 ... e:ectx e:expr_1 ...]))
-   (array any [(apply-env/e:expr env e:expr_0) ...
-               (apply-env/e:ectx env e:ectx)
-               (apply-env/e:expr env e:expr_1) ...])]
-  [(apply-env/e:ectx env (e:expr_0 ... e:ectx e:expr_1 ...))
-   ((apply-env/e:expr env e:expr_0) ...
-    (apply-env/e:ectx env e:ectx)
-    (apply-env/e:expr env e:expr_1) ...)]
-  [(apply-env/e:ectx env (t-app e:ectx e:type ...))
-   (t-app (apply-env/e:ectx env e:ectx)
-          (apply-env/e:type env e:type) ...)]
-  [(apply-env/e:ectx env (i-app e:ectx e:idx ...))
-   (i-app (apply-env/e:ectx env e:ectx)
-          (apply-env/e:idx env e:idx) ...)]
-  [(apply-env/e:ectx env (unbox (var ... e:ectx) e:expr))
-   (unbox (var ... (apply-env/e:ectx env e:ectx))
-     (apply-env/e:expr env e:expr))]
-  [(apply-env/e:ectx env (unbox (var ... e:expr) e:ectx))
-   (unbox (var ... (apply-env/e:expr env e:expr))
-     (apply-env/e:ectx env e:ectx))])
-
-(define-metafunction Remora-elab
-  apply-env/e:atom : env e:atom -> e:atom
-  [(apply-env/e:atom _ base-val) base-val]
-  [(apply-env/e:atom _ op) op]
-  [(apply-env/e:atom env (λ [(var e:type) ...] e:expr))
-   (λ [(var (apply-env/e:type env e:type)) ...] (apply-env/e:expr env e:expr))]
-  [(apply-env/e:atom env (Tλ [(var e:kind) ...] e:expr))
-   (λ [(var e:kind) ...] (apply-env/e:expr env e:expr))]
-  [(apply-env/e:atom env (Iλ [(var e:sort) ...] e:expr))
-   (λ [(var e:sort) ...] (apply-env/e:expr env e:expr))]
-  [(apply-env/e:atom env (box e:idx ... e:expr e:type))
-   (box (apply-env/e:idx env e:idx) ...
-        (apply-env/e:atom env e:expr)
-        (apply-env/e:type env e:type))])
-
-(define-metafunction Remora-elab
-  apply-env/e:actx : env e:actx -> e:actx
-  [(apply-env/e:actx _ hole) hole]
-  [(apply-env/e:actx env (λ [(var e:type) ...] e:ectx))
-   (λ [(var (apply-env/e:type env e:type)) ...] (apply-env/e:ectx env e:ectx))]
-  [(apply-env/e:actx env (tλ [(var kind) ...] e:ectx))
-   (tλ [(var kind) ...] (apply-env/e:ectx env e:ectx))]
-  [(apply-env/e:actx env (iλ [(var sort) ...] e:ectx))
-   (iλ [(var sort) ...] (apply-env/e:ectx env e:ectx))]
-  [(apply-env/e:actx env (box e:idx ... e:ectx e:type))
-   (box (apply-env/e:idx env e:idx) ...
-        (apply-env/e:actx env e:ectx)
-        (apply-env/e:type env e:type))])
-
-(define-metafunction Remora-elab
-  apply-env/e:type : env e:type -> e:type
-  [(apply-env/e:type _ var) var]
-  [(apply-env/e:type env (^ var))
-   (apply-env/e:type env type)
-   (where [_ ... (^ var type) _ ...] env)]
-  [(apply-env/e:type _ (^ var)) (^ var)]
-  [(apply-env/e:type _ base-type) base-type]
-  [(apply-env/e:type env (Array e:type e:idx))
-   (Array (apply-env/e:type env e:type)
-          (apply-env/e:idx env e:idx))]
-  [(apply-env/e:type env (-> [type_in ...] type_out))
-   (-> [(apply-env/e:type env type_in) ...]
-       (apply-env/e:type env type_out))]
-  [(apply-env/e:type env (∀ [(var kind) ...] type))
-   (∀ [(var kind) ...] (apply-env/e:type env type))]
-  [(apply-env/e:type env (Π [(var sort) ...] type))
-   (Π [(var sort) ...] (apply-env/e:type env type))]
-  [(apply-env/e:type env (Σ [(var sort) ...] type))
-   (Σ [(var sort) ...] (apply-env/e:type env type))])
-
-(define-metafunction Remora-elab
-  apply-env/e:idx : env e:idx -> e:idx
-  [(apply-env/e:idx _ var) var]
-  [(apply-env/e:idx env (^ var))
-   (apply-env/e:idx env idx)
-   (where [_ ... (^ var idx) _ ...] env)]
-  [(apply-env/e:idx _ (^ var)) (^ var)]
-  [(apply-env/e:idx _ natural) natural]
-  [(apply-env/e:idx env {+ idx ...})
-   {+ (apply-env/e:idx env idx) ...}]
-  [(apply-env/e:idx env {Shp idx ...})
-   {Shp (apply-env/e:idx env idx) ...}]
-  [(apply-env/e:idx env {++ idx ...})
-   {++ (apply-env/e:idx env idx) ...}])
-
-;;;;----------------------------------------------------------------------------
-;;;; Utility metafunctions for converting implicit-language types into
-;;;; explicit-language types
-;;;;----------------------------------------------------------------------------
-(define-metafunction Remora-elab
-  elab-type : type -> e:type
-  [(elab-type (∀ (tvar ...) type))
-   (∀ [(tvar->bind tvar) ...] (elab-type type))]
-  [(elab-type (Π (ivar ...) type))
-   (Π [(ivar->bind ivar) ...] (elab-type type))]
-  [(elab-type (Σ (ivar ...) type))
-   (Σ [(ivar->bind ivar) ...] (elab-type type))]
-  [(elab-type (-> [type_in ...] type_out))
-   (-> [(elab-type type_in) ...] (elab-type type_out))]
-  [(elab-type (Array type idx))
-   (Array (elab-type type) idx)]
-  [(elab-type base-type) base-type]
-  [(elab-type var) var]
-  [(elab-type (^ var)) (^ var)])
-
-(define-metafunction Remora-elab
-  tvar->bind : tvar -> (e:var e:kind)
-  [(tvar->bind atmvar) (atmvar Atom)]
-  [(tvar->bind arrvar) (arrvar Array)])
-
-(define-metafunction Remora-elab
-  ivar->bind : ivar -> (e:var e:sort)
-  [(ivar->bind dvar) (dvar Dim)]
-  [(ivar->bind svar) (svar Shape)])
-
-
-;;;;----------------------------------------------------------------------------
-;;;; Utility metafunctions for generating variable names visibly associated
-;;;; with some existing term-level variable
-;;;;----------------------------------------------------------------------------
-(define-metafunction Remora-elab
-  dim-tag : var natural -> dvar
-  [(dim-tag var natural)
-   ,(string->symbol (string-append
-                     "$"
-                     (symbol->string (term var))
-                     (number->string (term natural))))])
-(define-metafunction Remora-elab
-  shp-tag : var -> svar
-  [(shp-tag var)
-   ,(string->symbol (string-append "@" (symbol->string (term var))))])
-(define-metafunction Remora-elab
-  atm-tag : var -> atmvar
-  [(atm-tag var)
-   ,(string->symbol (string-append "&" (symbol->string (term var))))])
