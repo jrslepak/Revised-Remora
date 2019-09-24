@@ -101,7 +101,6 @@
 (define-judgment-form Remora-elab
   #:mode (check/atom I I I I O O O)
   #:contract (check/atom env archive atom atmtype env archive e:atom)
-  ;; TODO: chk-sub, chk-fn, chk-box
   [(synth/atom env_0 archive_0 atom atmtype_lo env_1 archive_1 e:atom)
    (subtype/atom env_1 archive_1 atmtype_lo atmtype_hi env_2 archive_2 e:actx)
    --- chk:sub/atom
@@ -128,7 +127,19 @@
                [env-entry_2 ...] archive_2
                (apply-env/e:atom env_2
                 (λ [(var (elab-type arrtype_generated)) ...]
-                  (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))])
+                  (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))]
+  [(sort-compat env_0 ivar idx) ...
+   (check/expr env_0 archive_0
+               expr (subst* arrtype [(ivar idx) ...])
+               env_1 archive_1 e:expr)
+   --- chk:box
+   (check/atom env_0 archive_0
+               (box idx ... expr)
+               (Σ [ivar ...] arrtype)
+               env_1 archive_1
+               (box idx ... e:expr
+                    (apply-env/e:type env_1
+                                      (elab-type (Σ [ivar ...] arrtype)))))])
 
 
 (define-judgment-form Remora-elab
@@ -268,6 +279,11 @@
                  env_2 archive_2
                  (lift-atom-coercion e:actx))])
 
+;;;;----------------------------------------------------------------------------
+;;;; Subtype instantiation judgments
+;;;; Note: only "structural" rules work for atom subtyping because we cannot
+;;;; build a nontrivial coercion context.
+;;;;----------------------------------------------------------------------------
 ;;; Instantiate an atom type variable on the left (i.e., as a subtype of a given
 ;;; goal type).
 (define-judgment-form Remora-elab
@@ -299,7 +315,9 @@
     [env-entry_l ... (^ tvar_lo) env-entry_m ... (^ tvar_hi) env-entry_m ...]
     archive
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ... (^ tvar_lo) env-entry_m ... (^ tvar_hi (^ tvar_lo)) env-entry_m ...]
+    [env-entry_l ...
+     (^ tvar_lo) env-entry_m ...
+     (^ tvar_hi (^ tvar_lo)) env-entry_m ...]
     archive hole)]
   ;; If the goal is an exvar bound later and already solved, propagate that
   ;; solution back to the earlier existential.
@@ -307,52 +325,19 @@
    --- AtmL:reach*
    (instL/atom
     [env-entry_l ...
-     (^ tvar_lo)
-     env-entry_m ...
-     (^ tvar_hi atmtype)
-     env-entry_m ...]
+     (^ tvar_lo) env-entry_m ...
+     (^ tvar_hi atmtype) env-entry_m ...]
     archive
     (^ tvar_lo) (^ tvar_hi)
     [env-entry_l ...
-     (^ tvar_lo atmtype)
-     env-entry_m ...
-     (^ tvar_hi atmtype)
-     env-entry_m ...]
+     (^ tvar_lo atmtype) env-entry_m ...
+     (^ tvar_hi atmtype) env-entry_m ...]
     archive
-    hole)]
-  ;;----------------------------------------------------------------------------
-  ;; "De-structural" rules: Peel apart the goal type.
-  ;;----------------------------------------------------------------------------
-  ;; TODO: all, pi, sigma
-  [(where #f (monotype? (-> [arrtype_in ...] arrtype_out)))
-   (where (tvar_in ...)
-     ,(map gensym (build-list (length (term [arrtype_in ...]))
-                              (λ x 'arg_))))
-   (where tvar_out ,(gensym 'ret_))
-   (instR/arrays [env_entry_l ... (^ tvar) env_entry_r ...] archive_0
-                 [arrtype_in ...]
-                 [(^ tvar_in) ...]
-                 env_1 archive_1 [e:ectx_in ...])
-   (instL/array env_1 archive_1
-                (^ tvar_out) arrtype_out
-                env_2 archive_2 e:ectx_out)
-   --- AtmL:fn
-   (instL/atom [env_entry_l ... (^ tvar) env_entry_r ...]
-               archive_0
-               (^ tvar) (-> [arrtype_in ...] arrtype_out)
-               [env_entry_l ...
-                (^ tvar (-> [(^ tvar_in) ...] (^ tvar_out)))
-                env_entry_r ...]
-               archive_2
-               ;; TODO: arg/ret coercion?
-               hole)])
+    hole)])
 
 (define-judgment-form Remora-elab
   #:mode (instR/atom I I I I O O O)
   #:contract (instR/atom env archive atmtype exatmvar env archive e:actx)
-  ;;----------------------------------------------------------------------------
-  ;; "Structural" rules
-  ;;----------------------------------------------------------------------------
   [(kind-atm (env-entry_l ...) monotype)
    --- AtmR:solve
    (instR/atom [env-entry_l ... (^ tvar) env-entry_r ...] archive
@@ -372,58 +357,22 @@
     [env-entry_l ... (^ tvar_hi) env-entry_m ... (^ tvar_lo) env-entry_r ...]
     archive
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ... (^ tvar_hi) env-entry_m ... (^ tvar_lo (^ tvar_hi)) env-entry_r ...]
+    [env-entry_l ...
+     (^ tvar_hi) env-entry_m ...
+     (^ tvar_lo (^ tvar_hi)) env-entry_r ...]
     archive hole)]
   [(kind-atm [env-entry_l ...] atmtype)
    --- AtmR:reach*
    (instR/atom
-    [env-entry_l ... (^ tvar_hi) env-entry_m ... (^ tvar_lo atmtype) env-entry_r ...]
+    [env-entry_l ...
+     (^ tvar_hi) env-entry_m ...
+     (^ tvar_lo atmtype) env-entry_r ...]
     archive
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ... (^ tvar_hi atmtype) env-entry_m ... (^ tvar_lo atmtype) env-entry_r ...]
-    archive hole)]
-  ;;----------------------------------------------------------------------------
-  ;; "De-structural" rules
-  ;;----------------------------------------------------------------------------
-  ;; TODO: Can fn/all/pi/sigma work at all if a coercion is needed?
-  #;
-  [(where #f (monotype? (-> [arrtype_in ...] arrtype_out)))
-   (where (tvar_in ...)
-     ,(map gensym (build-list (length (term [arrtype_in ...]))
-                              (λ x 'arg_))))
-   (where tvar_out ,(gensym 'ret_))
-   (instL/arrays [env_entry_l ... (^ tvar) env_entry_r ...] archive_0
-                 [(^ tvar_in) ...]
-                 [arrtype_in ...]
-                 env_1 archive_1 [e:ectx_in ...])
-   (instR/array env_1 archive_1
-                arrtype_out (^ tvar_out)
-                env_2 archive_2 e:ectx_out)
-   --- AtmR:fn
-   (instR/atom [env_entry_l ... (^ tvar) env_entry_r ...]
-               archive_0
-               (-> [arrtype_in ...] arrtype_out) (^ tvar)
-               [env_entry_l ...
-                (^ tvar (-> [(^ tvar_in) ...] (^ tvar_out)))
-                env_entry_r ...]
-               archive_2
-               ;; TODO: arg/ret coercion?
-               hole)]
-  #;
-  [(where var_sm ,(gensym 'SM_))
-   ;; Maybe only allow this instantiation if the type underlying the ∀ is scalar
-   (equate env_0 archive_0
-           shp_lo {Shp}
-           [env_entry_0 ...] archive_1)
-   (instR/atom [env_entry_0 ... (?i var_sm) (^ tvar_lo) ...] archive_1
-               (subst* atmtype_lo [(tvar_lo (^ tvar_lo)) ...]) (^ tvar_hi)
-               [env_entry_1 ... (?i var_sm) _ ...] archive_2 e:actx)
-   --- AtmR:all
-   (instR/atom env_0 archive_0
-               (∀ [tvar_lo ...] (Array atmtype_lo shp_lo)) (^ tvar_hi)
-               [env_entry_1 ...] archive_2
-               ;; TODO: instantiation coercion
-               hole)])
+    [env-entry_l ...
+     (^ tvar_hi atmtype) env-entry_m ...
+     (^ tvar_lo atmtype) env-entry_r ...]
+    archive hole)])
 
 
 (define-judgment-form Remora-elab

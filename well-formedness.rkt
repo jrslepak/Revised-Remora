@@ -3,7 +3,8 @@
 (require redex
          "elab-lang.rkt")
 (provide kind-atm kind-array
-         sort-dim sort-shp)
+         sort-dim sort-shp
+         sort-compat)
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Type-/index-level well-formedness checks
@@ -69,3 +70,13 @@
    (sort-dim [_ ... dvar _ ...] dvar)]
   [--- sort:exdvar
    (sort-dim [_ ... exdvar _ ...] exdvar)])
+
+(define-judgment-form Remora-elab
+  #:mode (sort-compat I I I)
+  #:contract (sort-compat env ivar idx)
+  [(sort-shp env shp)
+   --- sort:shp
+   (sort-compat env svar shp)]
+  [(sort-dim env dim)
+   --- sort:dim
+   (sort-compat env dvar dim)])
