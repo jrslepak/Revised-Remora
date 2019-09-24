@@ -373,7 +373,7 @@
    (instR/atom [env-entry_l0 ... (^ tvar atmtype) env-entry_r ...] archive_0
                monotype (^ tvar)
                [env-entry_l1 ... (^ tvar atmtype) env-entry_r ...]
-               archive_1 hole)]
+               archive_1 e:actx)]
   [--- AtmR:reach
    (instR/atom
     [env-entry_l ... (^ tvar_hi) env-entry_m ... (^ tvar_lo) env-entry_r ...]
@@ -403,13 +403,41 @@
   ;;----------------------------------------------------------------------------
   ;; "Structural" rules
   ;;----------------------------------------------------------------------------
-  [(kind-array [env-entry_l ...] arrtype)
+  [(kind-array [env-entry_l ...] monotype)
    --- ArrL:solve
    (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive
-                (^ tvar) arrtype
-                [env-entry_l ... (^ tvar arrtype) env-entry_r ...]
+                (^ tvar) monotype
+                [env-entry_l ... (^ tvar monotype) env-entry_r ...]
                 archive hole)]
-  ;; TODO: solved, reach, reach*
+  [(subtype/expr [env-entry_l0 ...] archive_0
+                 arrtype monotype
+                 [env-entry_l1 ...] archive_1 e:ectx)
+   --- ArrL:solved
+   (instL/array [env-entry_l0 ... (^ tvar arrtype) env-entry_r ...] archive_0
+                (^ tvar) monotype
+                [env-entry_l1 ... (^ tvar arrtype) env-entry_r ...] archive_1
+                e:ectx)]
+  [--- ArrL:reach
+   (instL/array
+    [env-entry_l ... (^ tvar_lo) env-entry_m ... (^ tvar_hi) env-entry_r ...]
+    archive
+    (^ tvar_lo) (^ tvar_hi)
+    [env-entry_l ...
+     (^ tvar_lo) env-entry_m ...
+     (^ tvar_hi (^ tvar_lo)) env-entry_r ...]
+    archive hole)]
+  [(kind-array [env-entry_l ...] arrtype)
+   --- ArrL:reach*
+   (instL/array
+    [env-entry_l ...
+     (^ tvar_lo) env-entry_m ...
+     (^ tvar_hi arrtype) env-entry_r ...]
+    archive
+    (^ tvar_lo) (^ tvar_hi)
+    [env-entry_l ...
+     (^ tvar_lo arrtype) env-entry_m ...
+     (^ tvar_hi arrtype) env-entry_r ...]
+    archive hole)]
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
@@ -433,12 +461,41 @@
   ;;----------------------------------------------------------------------------
   ;; "Structural" rules
   ;;----------------------------------------------------------------------------
-  [(kind-array [env-entry_l ...] arrtype)
+  [(kind-array [env-entry_l ...] monotype)
    --- ArrR:solve
    (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive
-                arrtype (^ tvar)
-                [env-entry_l ... (^ tvar arrtype) env-entry_r ...]
+                (^ tvar) monotype
+                [env-entry_l ... (^ tvar monotype) env-entry_r ...]
                 archive hole)]
+  [(subtype/expr [env-entry_l0 ...] archive_0
+                 monotype arrtype
+                 [env-entry_l1 ...] archive_1 e:ectx)
+   --- ArrR:solved
+   (instR/array [env-entry_l0 ... (^ tvar arrtype) env-entry_r ...] archive_0
+                monotype (^ tvar)
+                [env-entry_l1 ... (^ tvar arrtype) env-entry_r ...] archive_1
+                e:ectx)]
+  [--- ArrR:reach
+   (instR/array
+    [env-entry_l ... (^ tvar_hi) env-entry_m ... (^ tvar_lo) env-entry_r ...]
+    archive
+    (^ tvar_lo) (^ tvar_hi)
+    [env-entry_l ...
+     (^ tvar_hi) env-entry_m ...
+     (^ tvar_lo (^ tvar_hi)) env-entry_r ...]
+    archive hole)]
+  [(kind-array [env-entry_l ...] arrtype)
+   --- ArrR:reach*
+   (instR/array
+    [env-entry_l ...
+     (^ tvar_hi) env-entry_m ...
+     (^ tvar_lo arrtype) env-entry_r ...]
+    archive
+    (^ tvar_lo) (^ tvar_hi)
+    [env-entry_l ...
+     (^ tvar_hi arrtype) env-entry_m ...
+     (^ tvar_lo arrtype) env-entry_r ...]
+    archive hole)]
   ;; TODO: solved, reach, reach*
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
