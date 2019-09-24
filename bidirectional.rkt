@@ -139,7 +139,25 @@
                env_1 archive_1
                (box idx ... e:expr
                     (apply-env/e:type env_1
-                                      (elab-type (Σ [ivar ...] arrtype)))))])
+                                      (elab-type (Σ [ivar ...] arrtype)))))]
+  [(check/atom [env-entry_0 ... tvar ...] archive_0
+               atom atmtype
+               [env-entry_1 ... tvar ... _ ...] archive_1
+               e:atom)
+   --- chk:∀
+   (check/atom [env-entry_0 ...] archive_0
+               atom (∀ [tvar ...] (Array atmtype {Shp}))
+               [env-entry_1 ...] archive_1
+               (tλ [(tvar->bind tvar) ...] (array {} [e:atom])))]
+  [(check/atom [env-entry_0 ... ivar ...] archive_0
+               atom atmtype
+               [env-entry_1 ... ivar ... _ ...] archive_1
+               e:atom)
+   --- chk:Π
+   (check/atom [env-entry_0 ...] archive_0
+               atom (Π [ivar ...] (Array atmtype {Shp}))
+               [env-entry_1 ...] archive_1
+               (iλ [(ivar->bind ivar) ...] (array {} [e:atom])))])
 
 
 (define-judgment-form Remora-elab
@@ -151,7 +169,7 @@
    --- chk:sub/expr
    (check/expr env_0 archive_0
                expr arrtype_hi
-               env_1 archive_1 (in-hole e:ectx e:expr))]
+               env_2 archive_2 (in-hole e:ectx e:expr))]
   [(check/atoms env_0 archive_0 [atom ...] atmtype env_1 archive_1 [e:atom ...])
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (atom ...)))))
@@ -184,8 +202,10 @@
 (define-judgment-form Remora-elab
   #:mode (subtype/atom I I I I O O O)
   #:contract (subtype/atom env archive atmtype atmtype env archive e:actx)
-  [(subtype/atom env archive base-type base-type env archive hole)
-   sub-base]
+  [--- sub:base
+   (subtype/atom env archive base-type base-type env archive hole)]
+  [--- sub:atmvar
+   (subtype/atom env archive atmvar atmvar env archive hole)]
   [;; TODO: occurs check
    (instL/atom env_0 archive_0 exatmvar atmtype env_1 archive_1 e:actx)
    --- sub:instL/atom
@@ -219,6 +239,8 @@
     (Array atmvar shp_1)
     env_1 archive_1
     hole)]
+  [--- sub:arrvar
+   (subtype/expr env archive arrvar arrvar env archive hole)]
   [(subtype/expr env archive arrvar arrvar env archive hole)
    sub-arrvar]
   [(equate env_0 archive_0 shp_fl shp_fh env_1 archive_1)
