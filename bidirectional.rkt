@@ -175,7 +175,15 @@
 (define-judgment-form Remora-elab
   #:mode (check/expr I I I I O O O)
   #:contract (check/expr env archive expr arrtype env archive e:expr)
-  [;; TODO: prune this search path except in "last resort" cases
+  [;; Prune this search path except in "last resort" cases. Checking array and
+   ;; frame forms at Array type should go through the associated chk rule.
+   (side-condition
+    ,(not (or (redex-match? Remora-elab
+                            [(array _ ...) (Array _ ...)]
+                            (term [expr arrtype_hi]))
+              (redex-match? Remora-elab
+                            [(frame _ ...) (Array _ ...)]
+                            (term [expr arrtype_hi])))))
    (synth/expr env_0 archive_0 expr arrtype_lo env_1 archive_1 e:expr)
    (subtype/expr env_1 archive_1 arrtype_lo arrtype_hi env_2 archive_2 e:ectx)
    --- chk:sub/expr
@@ -594,7 +602,6 @@
      (^ tvar_hi arrtype) env-entry_m ...
      (^ tvar_lo arrtype) env-entry_r ...]
     archive hole)]
-  ;; TODO: solved, reach, reach*
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
