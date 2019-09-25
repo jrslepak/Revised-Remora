@@ -95,7 +95,19 @@
                (Array atmtype
                       (Inormalize-idx {++ {Shp natural ...} shp}))
                env_1 archive_0
-               (frame {natural ...} [e:expr ...]))])
+               (frame {natural ...} [e:expr ...]))]
+  [(synth/expr env_0 archive_0
+               expr_f arrtype_f
+               env_1 archive_1 e:expr_fp)
+   (synth-app
+    env_1 archive_1 e:expr_fp arrtype_f [expr_a ...]
+    arrtype_out env_2 archive_2 e:expr_fm [e:expr_a ...])
+   --- syn:app
+   (synth/expr env_0 archive_0
+               (expr_f expr_a ...)
+               arrtype_out
+               env_2 archive_2
+               (e:expr_fm e:expr_a ...))])
 
 
 (define-judgment-form Remora-elab
