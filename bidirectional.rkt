@@ -198,8 +198,15 @@
 
 (define-judgment-form Remora-elab
   #:mode (synth-app I I I I I O O O O O)
-  #:contract (synth-app env archive e:expr type expr
-                        type env archive e:expr e:expr)
+  #:contract
+  (synth-app
+   ;; input env, input archive
+   ;; partly elaborated fn expr, fn type, arg exprs
+   env archive e:expr type [expr ...]
+   ;; result type, output env, output archive,
+   ;; monomorphized elaborated fn expr, elaborated arg exprs
+   type env archive e:expr [e:expr ...])
+  ;; TODO: app:∀, app:Π, app:->*f, app:->*a, app:->0
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
@@ -208,19 +215,34 @@
                expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 shp_fun {++ (^ svar_aext) (^ svar_afrm)}
+   (equate env_1 archive_1 shp_fun {++ (^ svar_afrm) (^ svar_aext)}
            env_2 archive_2)
-   --- app:->f
-   (synth-app [env-entry_0 ...] archive_0
+   ;; Imagine we have a curried function. After consuming only this first
+   ;; argument, what shape does the function array have? That is the "frame
+   ;; shape so far" at this point in processing the whole n-ary application.
+   (synth-app env_2 archive_2
               e:expr_fun
-              (Array (-> [(Array atmtype_in shp_in)]
+              (Array (-> [arrtype_rest ...]
                          (Array atmtype_out shp_out))
                      shp_fun)
-              expr_arg
-              (Array (apply-env/e:type env_1 atmtype_out)
-                     (Inormalize-idx
-                      (apply-env/e:idx env_1 {++ shp_fun shp_out})))
-              env_1 archive_1 e:expr_fun e:expr_arg)]
+              [expr_rest ...]
+              arrtype_out
+              env_3 archive_3
+              ;; At this point, there should be no more substantive changes to
+              ;; the elaborated function because the ∀/Π layers have all been
+              ;; removed, but giving a new metavariable allows some wiggle room
+              ;; for environment-application results to provide new info.
+              e:expr_fm [e:expr_rest ...])
+   --- app:->*f
+   (synth-app [env-entry_0 ...] archive_0
+              e:expr_fun
+              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
+                         (Array atmtype_out shp_out))
+                     shp_fun)
+              [expr_arg expr_rest ...]
+              arrtype_out
+              env_3 archive_3
+              e:expr_fm [e:expr_arg e:expr_rest ...])]
   ;; Applying a monomorphic unary function array, where the argument array
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
@@ -231,17 +253,34 @@
                e:expr_arg)
    (equate env_1 archive_1 (^ svar_afrm) {++ (^ svar_fext) shp_fun}
            env_2 archive_2)
-   --- app:->a
+   (synth-app env_2 archive_2
+              e:expr_fun
+              (Array (-> [arrtype_rest ...]
+                         (Array atmtype_out shp_out))
+                     (^ svar_afrm))
+              [expr_rest ...]
+              arrtype_out
+              env_3 archive_3
+              e:expr_fm [e:expr_rest ...])
+   --- app:->*a
    (synth-app [env-entry_0 ...] archive_0
               e:expr_fun
-              (Array (-> [(Array atmtype_in shp_in)]
+              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
                          (Array atmtype_out shp_out))
                      shp_fun)
-              expr_arg
-              (Array (apply-env/e:type env_1 (elab-type atmtype_out))
-                     (Inormalize-idx
-                      (apply-env/e:idx env_1 {++ (^ svar_afrm) shp_out})))
-              env_1 archive_1 e:expr_fun e:expr_arg)])
+              [expr_arg expr_rest ...]
+              arrtype_out
+              env_3 archive_3
+              e:expr_fm [e:expr_arg e:expr_rest ...])]
+  [--- app:->0
+   (synth-app env_0 archive_0
+              e:expr_fun
+              (Array (-> [] (Array atmtype_out shp_out))
+                     shp_fun)
+              []
+              (Array atmtype_out {++ shp_fun shp_out})
+              env_0 archive_0
+              e:expr_fun [])])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Judgments related to subtyping (as instantiability)
