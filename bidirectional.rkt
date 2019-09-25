@@ -196,6 +196,53 @@
                env_1 archive_1
                (frame {natural ...} [e:expr ...]))])
 
+(define-judgment-form Remora-elab
+  #:mode (synth-app I I I I I O O O O O)
+  #:contract (synth-app env archive e:expr type expr
+                        type env archive e:expr e:expr)
+  ;; Applying a monomorphic unary function array, where the function array
+  ;; provides the principal frame
+  [(where svar_afrm ,(gensym '@AFRM_))
+   (where svar_aext ,(gensym '@AEXT_))
+   (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_aext)] archive_0
+               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
+               env_1 archive_1
+               e:expr_arg)
+   (equate env_1 archive_1 shp_fun {++ (^ svar_aext) (^ svar_afrm)}
+           env_2 archive_2)
+   --- app:->f
+   (synth-app [env-entry_0 ...] archive_0
+              e:expr_fun
+              (Array (-> [(Array atmtype_in shp_in)]
+                         (Array atmtype_out shp_out))
+                     shp_fun)
+              expr_arg
+              (Array (apply-env/e:type env_1 atmtype_out)
+                     (Inormalize-idx
+                      (apply-env/e:idx env_1 {++ shp_fun shp_out})))
+              env_1 archive_1 e:expr_fun e:expr_arg)]
+  ;; Applying a monomorphic unary function array, where the argument array
+  ;; provides the principal frame
+  [(where svar_afrm ,(gensym '@AFRM_))
+   (where svar_fext ,(gensym '@FEXT_))
+   (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_fext)] archive_0
+               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
+               env_1 archive_1
+               e:expr_arg)
+   (equate env_1 archive_1 (^ svar_afrm) {++ (^ svar_fext) shp_fun}
+           env_2 archive_2)
+   --- app:->a
+   (synth-app [env-entry_0 ...] archive_0
+              e:expr_fun
+              (Array (-> [(Array atmtype_in shp_in)]
+                         (Array atmtype_out shp_out))
+                     shp_fun)
+              expr_arg
+              (Array (apply-env/e:type env_1 (elab-type atmtype_out))
+                     (Inormalize-idx
+                      (apply-env/e:idx env_1 {++ (^ svar_afrm) shp_out})))
+              env_1 archive_1 e:expr_fun e:expr_arg)])
+
 ;;;;----------------------------------------------------------------------------
 ;;;; Judgments related to subtyping (as instantiability)
 ;;;;----------------------------------------------------------------------------
@@ -525,7 +572,9 @@
   ;; Ask an ILP solver whether dim_0 and dim_1 can be equated and what values
   ;; must be assigned to their unsolved existential variables in order to do so.
   [(where (_ ... (env_1 archive_1) _ ...)
-     (equate-shapes env_0 archive_0 shp_0 shp_1))
+     (equate-shapes env_0 archive_0
+                    (apply-env/e:idx env_0 shp_0)
+                    (apply-env/e:idx env_0 shp_1)))
    --- equate:shp
    (equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)]
   [--- equate:dim
