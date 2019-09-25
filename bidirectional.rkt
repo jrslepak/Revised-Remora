@@ -36,7 +36,9 @@
                (λ [(var spec) ...] expr)
                (-> [arrtype_generated ...] arrtype_out)
                [env-entry_1 ...] archive_1
-               (λ [(var (elab-type arrtype_generated)) ...] e:expr))])
+               (apply-env/e:atom
+                env_1
+                (λ [(var (elab-type arrtype_generated)) ...] e:expr)))])
 
 (define-judgment-form Remora-elab
   #:mode (synth/expr I I I O O O O)
@@ -226,7 +228,7 @@
    ;; result type, output env, output archive,
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
-  ;; TODO: app:∀, app:Π, app:->*f, app:->*a, app:->0
+  ;; TODO: app:∀, app:Π
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
