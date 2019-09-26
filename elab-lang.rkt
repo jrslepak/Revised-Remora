@@ -171,7 +171,7 @@
   [(apply-env/e:expr env (array any e:type))
    (array any (apply-env/e:type e:type))]
   [(apply-env/e:expr env (frame any [e:expr ...]))
-   (array any [(apply-env/e:expr e:expr) ...])]
+   (frame any [(apply-env/e:expr env e:expr) ...])]
   [(apply-env/e:expr env (frame any e:type))
    (array any (apply-env/e:type e:type))]
   [(apply-env/e:expr env (e:expr_f e:expr_a ...))
@@ -181,7 +181,7 @@
   [(apply-env/e:expr env (i-app e:expr e:idx ...))
    (i-app (apply-env/e:expr env e:expr) (apply-env/e:idx env e:idx) ...)]
   [(apply-env/e:expr env (unbox (var ... e:expr) e:expr))
-   (unbox (var ... (apply-env/e:expr e:expr)) (apply-env/e:expr e:expr))])
+   (unbox (var ... (apply-env/e:expr env e:expr)) (apply-env/e:expr env e:expr))])
 
 (define-metafunction Remora-elab
   apply-env/e:ectx : env e:ectx -> e:ectx

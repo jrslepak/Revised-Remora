@@ -107,7 +107,7 @@
    --- syn:app
    (synth/expr env_0 archive_0
                (expr_f expr_a ...)
-               arrtype_out
+               (apply-env/e:type env_2 arrtype_out)
                env_2 archive_2
                (e:expr_fm e:expr_a ...))])
 
@@ -203,19 +203,19 @@
                env_2 archive_2
                (array {natural ...} [e:atom ...]))]
   [(where exsvar (^ ,(gensym '@CELL_)))
-   (equate [env-entry_0 ... exsvar] archive_0
-           shp {++ {Shp natural ...} exsvar}
-           env_1 archive_1)
-   (check/exprs env_1 archive_1
+   (check/exprs [env-entry_0 ... exsvar] archive_0
                 [expr ...] (Array atmtype exsvar)
-                env_2 archive_2 [e:expr ...])
+                env_1 archive_1 [e:expr ...])
+   (equate env_1 archive_1
+           shp {++ {Shp natural ...} exsvar}
+           env_2 archive_2)
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (expr ...)))))
    --- chk:frame
    (check/expr [env-entry_0 ...] archive_0
                (frame {natural ...} [expr ...])
                (Array atmtype shp)
-               env_1 archive_1
+               env_2 archive_2
                (frame {natural ...} [e:expr ...]))])
 
 (define-judgment-form Remora-elab
@@ -228,7 +228,40 @@
    ;; result type, output env, output archive,
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
-  ;; TODO: app:∀, app:Π
+  ;; TODO: In app:-> rules, mandate scalar frame shape when cell type contained
+  ;; a universal shape variable.
+  [(synth-app [env-entry_0 ... (^ tvar) ...] archive_0
+              e:expr_fp (subst* (Array atmtype_fun {++ shp_all shp_fun})
+                                [(tvar (^ tvar)) ...])
+              [expr_arg ...]
+              arrtype_out
+              env_1 archive_1
+              e:expr_fm [e:expr_arg ...])
+   --- app:∀
+   (synth-app [env-entry_0 ...] archive_0
+              ;; TODO: Generalize beyond requiring scalar inside universal
+              e:expr_fp (Array (∀ [tvar ...] (Array atmtype_fun shp_fun)) shp_all)
+              [expr_arg ...]
+              arrtype_out
+              env_1 archive_1
+              (apply-env/e:expr env_1 (t-app e:expr_fm (^ tvar) ...))
+              [e:expr_arg ...])]
+  [(synth-app [env-entry_0 ... (^ ivar) ...] archive_0
+              e:expr_fp (subst* (Array atmtype_fun {++ shp_all shp_fun})
+                                [(ivar (^ ivar)) ...])
+              [expr_arg ...]
+              arrtype_out
+              env_1 archive_1
+              e:expr_fm [e:expr_arg ...])
+   --- app:Π
+   (synth-app [env-entry_0 ...] archive_0
+              ;; TODO: Generalize beyond requiring scalar inside universal
+              e:expr_fp (Array (Π [ivar ...] (Array atmtype_fun shp_fun)) shp_all)
+              [expr_arg ...]
+              arrtype_out
+              env_1 archive_1
+              (apply-env/e:expr env_1 (i-app e:expr_fm (^ ivar) ...))
+              [e:expr_arg ...])]
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
