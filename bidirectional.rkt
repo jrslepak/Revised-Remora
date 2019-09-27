@@ -239,7 +239,6 @@
               e:expr_fm [e:expr_arg ...])
    --- app:∀
    (synth-app [env-entry_0 ...] archive_0
-              ;; TODO: Generalize beyond requiring scalar inside universal
               e:expr_fp (Array (∀ [tvar ...] (Array atmtype_fun shp_fun)) shp_all)
               [expr_arg ...]
               arrtype_out
@@ -255,7 +254,6 @@
               e:expr_fm [e:expr_arg ...])
    --- app:Π
    (synth-app [env-entry_0 ...] archive_0
-              ;; TODO: Generalize beyond requiring scalar inside universal
               e:expr_fp (Array (Π [ivar ...] (Array atmtype_fun shp_fun)) shp_all)
               [expr_arg ...]
               arrtype_out
@@ -266,11 +264,15 @@
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
    (where svar_aext ,(gensym '@AEXT_))
+   (where shp_afrm
+     ,(if (term (uses-exsvar? shp_in))
+          (term {Shp})
+          (term (^ svar_afrm))))
    (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_aext)] archive_0
-               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
+               expr_arg (Array atmtype_in {++ shp_afrm shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 shp_fun {++ (^ svar_afrm) (^ svar_aext)}
+   (equate env_1 archive_1 shp_fun {++ shp_afrm (^ svar_aext)}
            env_2 archive_2)
    ;; Imagine we have a curried function. After consuming only this first
    ;; argument, what shape does the function array have? That is the "frame
@@ -302,17 +304,21 @@
   ;; provides the principal frame
   [(where svar_afrm ,(gensym '@AFRM_))
    (where svar_fext ,(gensym '@FEXT_))
+   (where shp_afrm
+     ,(if (term (uses-exsvar? shp_in))
+          (term {Shp})
+          (term (^ svar_afrm))))
    (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_fext)] archive_0
-               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
+               expr_arg (Array atmtype_in {++ shp_afrm shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 (^ svar_afrm) {++ (^ svar_fext) shp_fun}
+   (equate env_1 archive_1 shp_afrm {++ (^ svar_fext) shp_fun}
            env_2 archive_2)
    (synth-app env_2 archive_2
               e:expr_fun
               (Array (-> [arrtype_rest ...]
                          (Array atmtype_out shp_out))
-                     (^ svar_afrm))
+                     shp_afrm)
               [expr_rest ...]
               arrtype_out
               env_3 archive_3

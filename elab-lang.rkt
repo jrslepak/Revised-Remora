@@ -19,7 +19,8 @@
          apply-env/e:type apply-env/e:idx
          subst*
          lift-atom-coercion fn-coercion
-         arg-env-entries)
+         arg-env-entries
+         uses-exsvar?)
 
 ;;; Define extended versions of implicit/explicit Remora which allow unsolved
 ;;; existential variables.
@@ -63,6 +64,14 @@
     Scl : type -> type
     [(Scl type) (Array type {Shp})])
 
+(define-metafunction Remora-elab
+  uses-exsvar? : shp -> boolean
+  [(uses-exsvar? exsvar) #t]
+  [(uses-exsvar? svar) #f]
+  [(uses-exsvar? {Shp _ ...}) #f]
+  [(uses-exsvar? {++ shp ...})
+   ,(for/or ([s (term (shp ...))])
+            (term (uses-exsvar? ,s)))])
 
 (define-metafunction Remora-elab
   Inormalize-idx : idx -> nidx
