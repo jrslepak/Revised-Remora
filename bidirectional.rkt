@@ -26,8 +26,9 @@
    (where [[env-entry_exvar ... (var arrtype_generated)] ...]
      [(arg-env-entries (var spec)) ...])
    (where [env-entry_new ...]
-     ,(apply append (term [[env-entry_exvar ... (var arrtype_generated)] ...])))
-   (synth/expr [env-entry_0 ... (?i var_sm) env-entry_new ...] archive_0
+     ,(apply append (term [[env-entry_exvar ...] ...])))
+   (synth/expr [env-entry_0 ... env-entry_new ... (?i var_sm) (var arrtype_generated) ...]
+               archive_0
                expr arrtype_out
                env_1 archive_1 e:expr)
    (where [env-entry_1 ... (?i var_sm) _ ...] env_1)
@@ -109,7 +110,7 @@
                (expr_f expr_a ...)
                (apply-env/e:type env_2 arrtype_out)
                env_2 archive_2
-               (e:expr_fm e:expr_a ...))])
+               (apply-env/e:expr env_2 (e:expr_fm e:expr_a ...)))])
 
 
 (define-judgment-form Remora-elab
@@ -391,17 +392,17 @@
   [(subtype/expr env archive arrvar arrvar env archive hole)
    sub-arrvar]
   [(equate env_0 archive_0 shp_fl shp_fh env_1 archive_1)
-   (subtype/exprs env_0 archive_0
+   (subtype/exprs env_1 archive_1
                   [arrtype_inh ...] [arrtype_inl ...]
-                  env_1 archive_1 [e:ectx_in ...])
-   (subtype/expr env_1 archive_1
+                  env_2 archive_2 [e:ectx_in ...])
+   (subtype/expr env_2 archive_2
                  arrtype_outl arrtype_outh
-                 env_2 archive_2 e:ectx_out)
+                 env_3 archive_3 e:ectx_out)
    --- sub:->
    (subtype/expr env_0 archive_0
                  (Array (-> [arrtype_inl ...] arrtype_outl) shp_fl)
                  (Array (-> [arrtype_inh ...] arrtype_outh) shp_fh)
-                 env_2 archive_2
+                 env_3 archive_3
                  (fn-coercion [arrtype_inl ...] [arrtype_inh ...]
                               [e:ectx_in ...] e:ectx_out))]
   [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
