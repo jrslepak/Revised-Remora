@@ -75,11 +75,13 @@
                  (^ tvar) (^ tvar type)
                  (^ ivar) (^ tvar idx))
   #:binding-forms
+  (expr #:refers-to type : type)
+  (atom #:refers-to type : type)
   (λ [(evar spec) ...] expr #:refers-to (shadow evar ...))
   (unbox (ivar ... evar expr) expr #:refers-to (shadow ivar ... evar))
-  (∀ [tvar ...] type #:refers-to (shadow tvar ...))
-  (Π [ivar ...] type #:refers-to (shadow ivar ...))
-  (Σ [ivar ...] type #:refers-to (shadow ivar ...)))
+  (∀ [tvar ...] type #:refers-to (shadow tvar ...)) #:exports (shadow tvar ...)
+  (Π [ivar ...] type #:refers-to (shadow ivar ...)) #:exports (shadow ivar ...)
+  (Σ [ivar ...] type #:refers-to (shadow ivar ...)) #:exports (shadow ivar ...))
 
 ;;; Build a scalar expr from any atom
 (define-metafunction Remora-implicit
