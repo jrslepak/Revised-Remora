@@ -328,7 +328,7 @@
 ;;; existential atom variable.
 (define-metafunction Remora-elab
   arg-env-entries : (var spec) -> [(^ var) ... (var arrtype)]
-  [(arg-env-entries (var arrtype)) [(arg arrtype)]]
+  [(arg-env-entries (var arrtype)) [(var arrtype)]]
   [(arg-env-entries (var all))
    [(^ atmvar) (^ svar) (var (Array (^ atmvar) (^ svar)))]
    (where svar (shp-tag var))
