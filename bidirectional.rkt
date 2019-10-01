@@ -44,7 +44,6 @@
 (define-judgment-form Remora-elab
   #:mode (synth/expr I I I O O O O)
   #:contract (synth/expr env archive expr arrtype env archive e:expr)
-  ;; TODO: syn-app (will need synthapp judgment)
   [(synth/expr [env-entry_0 ...] archive_0
                expr_s
                ;; TODO: subtyping to reconcile possible exvar with need for Σ
@@ -217,7 +216,45 @@
                (frame {natural ...} [expr ...])
                (Array atmtype shp)
                env_2 archive_2
-               (frame {natural ...} [e:expr ...]))])
+               (frame {natural ...} [e:expr ...]))]
+  ;; Trying to add some flexibility to account for the possibility of a ∀ with a
+  ;; non-scalar body. Then result cells from t-app will have nonscalar shape, so
+  ;; the result shape is not necessarily the same as the frame shape.
+  ;; Example (sugared) elaborated term:
+  ;;  [(tλ (*t) [(λ ((x *t)) 1) (λ ((x *t)) 2)])
+  ;;   (tλ (*t) [(λ ((x *t)) 3) (λ ((x *t)) 4)])]
+  ;;  with type [(∀ (*t) [(-> [*t] Int) 2]) 2]
+  ;; Perhaps the underlying implicit term here ought to be a frame insteaed of
+  ;; an array, and only a ∀ that wraps the entire thing should work with array?
+  ;; As a simplified form, allow any expression to have a ∀ wrapped around the
+  ;; whole thing. In order to get a split-shape universal, the programmer will
+  ;; have to write a frame of array literals.
+  [(equate [env-entry_0 ... tvar ...] archive_0
+           shp_scalar {Shp}
+           env_1 archive_1)
+   (check/expr env_1 archive_1
+               expr (Array atmtype shp_c)
+               [env-entry_2 ... tvar ... _ ...] archive_2
+               e:expr)
+   --- chk:Array∀
+   (check/expr [env-entry_0 ...] archive_0
+               expr
+               (Array (∀ [tvar ...] (Array atmtype shp_c)) shp_scalar)
+               [env-entry_2 ...] archive_2
+               (array {} [(tλ [(tvar->bind tvar) ...] e:expr)]))]
+  [(equate [env-entry_0 ... ivar ...] archive_0
+           shp_scalar {Shp}
+           env_1 archive_1)
+   (check/expr env_1 archive_1
+               expr (Array atmtype shp_c)
+               [env-entry_2 ... ivar ... _ ...] archive_2
+               e:expr)
+   --- chk:ArrayΠ
+   (check/expr [env-entry_0 ...] archive_0
+               expr
+               (Array (Π [ivar ...] (Array atmtype shp_c)) shp_scalar)
+               [env-entry_2 ...] archive_2
+               (array {} [(iλ [(ivar->bind ivar) ...] e:expr)]))])
 
 (define-judgment-form Remora-elab
   #:mode (synth-app I I I I I O O O O O)
@@ -229,8 +266,6 @@
    ;; result type, output env, output archive,
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
-  ;; TODO: In app:-> rules, mandate scalar frame shape when cell type contained
-  ;; a universal shape variable.
   [(synth-app [env-entry_0 ... (^ tvar) ...] archive_0
               e:expr_fp (subst* (Array atmtype_fun {++ shp_all shp_fun})
                                 [(tvar (^ tvar)) ...])
@@ -367,7 +402,7 @@
                  atmtype exatmvar
                  env_1 archive_1 e:actx)])
 (define-judgment-form Remora-elab
-  ;; TODO: sub:∀R, sub:ΠR, sub:ΣL, sub:ΣR
+  ;; TODO: sub:ΣL, sub:ΣR
   #:mode (subtype/expr I I I I O O O)
   #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
   ;; TODO: Should these three (base/atmvar/arrvar) be subsumed by a refl rule?
@@ -420,6 +455,25 @@
     (Array atmtype_hi shp_hi)
     [env-entry_1 ...] archive_1
     (apply-env/e:ectx env_1 (in-hole e:ectx (t-app hole (^ tvar) ...))))]
+  [(subtype/expr
+    [env-entry_0 ... tvar ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (Array atmtype_hi {++ shp_f shp_c})
+    env_1 archive_1 e:ectx)
+   --- sub:∀R
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (Array (∀ [tvar ...] (Array atmtype_hi shp_c)) shp_f)
+    env_1 archive_1
+    ;; Each shp_c cell needs to get wrapped in the ∀ by tη expansion
+    (coerce-each (Array atmtype_hi shp_c) e:ectx)
+    #;
+    ((array
+      {}
+      [(λ ((c (Array atmtype_hi shp_c)))
+         (array {} [(tλ [tvar ...] c)]))])
+     e:ectx))]
   [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
    (subtype/expr
     ;; Convert the argument type variable into an existential tvar
@@ -435,6 +489,23 @@
     (Array atmtype_hi shp_hi)
     [env-entry_1 ...] archive_1
     (apply-env/e:ectx env_1 (in-hole e:ectx (i-app hole (^ ivar) ...))))]
+  [(subtype/expr
+    [env-entry_0 ... ivar ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (Array atmtype_hi {++ shp_f shp_c})
+    env_1 archive_1 e:ectx)
+   --- sub:ΠR
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (Array (Π [ivar ...] (Array atmtype_hi shp_c)) shp_f)
+    env_1 archive_1
+    ;; Each shp_c cell needs to get wrapped in the ∀ by iη expansion
+    ((array
+      {}
+      [(λ ((c (Array atmtype_hi shp_c)))
+         (array {} [(iλ [ivar ...] c)]))])
+     e:ectx))]
   ;; After destructuring the atom type as much as possible, we can conclude that
   ;; [T_1 S_1] <: [T_2 S_2] by making sure T_1 <: T_2 and S_1 ≐ S_2. The
   ;; resulting coercion will be ugly. It must apply an η-expanded version of the
@@ -696,7 +767,7 @@
    --- syn*:base
    (synth/atoms env_0 archive_0 [atom] atmtype env_1 archive_1 [e:atom])]
   [(synth/atom env_0 archive_0 atom_0 atmtype_join env_1 archive_1 e:atom_0)
-   (synth/atoms env_1 archive_1 [atom_1 ...] atmtype_join env_n archive_n [e:atom_1 ...])
+   (check/atoms env_1 archive_1 [atom_1 ...] atmtype_join env_n archive_n [e:atom_1 ...])
    ;; TODO: replace with join operation on types with exvars
    --- syn*
    (synth/atoms env_0 archive_0 [atom_0 atom_1 ...+] atmtype_join
@@ -709,7 +780,7 @@
    --- syn*:base
    (synth/exprs env_0 archive_0 [expr] arrtype env_1 archive_1 [e:expr])]
   [(synth/expr env_0 archive_0 expr_0 arrtype_join env_1 archive_1 e:expr_0)
-   (synth/exprs env_1 archive_1 [expr_1 ...] arrtype_join env_n archive_n [e:expr_1 ...])
+   (check/exprs env_1 archive_1 [expr_1 ...] arrtype_join env_n archive_n [e:expr_1 ...])
    ;; TODO: replace with join operation on types with exvars
    --- syn*
    (synth/exprs env_0 archive_0 [expr_0 expr_1 ...+] arrtype_join

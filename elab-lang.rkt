@@ -18,7 +18,7 @@
          apply-env/e:atom apply-env/e:actx
          apply-env/e:type apply-env/e:idx
          subst*
-         lift-atom-coercion fn-coercion
+         lift-atom-coercion fn-coercion coerce-each
          arg-env-entries
          uses-exsvar?)
 
@@ -317,6 +317,12 @@
     hole)
    (where [var_fresh ...]
      ,(build-list (length (term (arrtype_inh ...))) (λ _ (gensym 'ARG_))))])
+
+;;; Build a coercion which lifts the specified coercion over these cells
+(define-metafunction Remora-elab
+  coerce-each : arrtype e:ectx -> e:ectx
+  [(coerce-each arrtype e:ectx)
+   ((array {} [(λ ((c arrtype)) (in-hole e:ectx c))]) hole)])
 
 
 
