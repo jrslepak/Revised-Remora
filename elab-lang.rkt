@@ -232,7 +232,7 @@
    (λ [(var e:sort) ...] (apply-env/e:expr env e:expr))]
   [(apply-env/e:atom env (box e:idx ... e:expr e:type))
    (box (apply-env/e:idx env e:idx) ...
-        (apply-env/e:atom env e:expr)
+        (apply-env/e:expr env e:expr)
         (apply-env/e:type env e:type))])
 
 (define-metafunction Remora-elab

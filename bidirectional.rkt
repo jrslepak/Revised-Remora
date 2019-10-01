@@ -142,7 +142,10 @@
                (apply-env/e:atom env_2
                 (λ [(var (elab-type arrtype_generated)) ...]
                   (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))]
-  [(sort-compat env_0 ivar idx) ...
+  [(side-condition
+    ;; Head off an ugly crash due to ellipsis length mismatch
+    ,(= (length (term (ivar ...))) (length (term (idx ...)))))
+   (sort-compat env_0 ivar idx) ...
    (check/expr env_0 archive_0
                expr (subst* arrtype [(ivar idx) ...])
                env_1 archive_1 e:expr)
@@ -180,12 +183,15 @@
   [;; Prune this search path except in "last resort" cases. Checking array and
    ;; frame forms at Array type should go through the associated chk rule.
    (side-condition
-    ,(not (or (redex-match? Remora-elab
-                            [(array _ ...) (Array _ ...)]
-                            (term [expr arrtype_hi]))
-              (redex-match? Remora-elab
-                            [(frame _ ...) (Array _ ...)]
-                            (term [expr arrtype_hi])))))
+    ,(or (not (or (redex-match? Remora-elab
+                                [(array _ ...) (Array _ ...)]
+                                (term [expr arrtype_hi]))
+                  (redex-match? Remora-elab
+                                [(frame _ ...) (Array _ ...)]
+                                (term [expr arrtype_hi]))))
+         (redex-match? Remora-elab
+                       (Array (Σ _ ...) _)
+                       (term arrtype_hi))))
    (synth/expr env_0 archive_0 expr arrtype_lo env_1 archive_1 e:expr)
    (subtype/expr env_1 archive_1 arrtype_lo arrtype_hi env_2 archive_2 e:ectx)
    --- chk:sub/expr
@@ -444,7 +450,7 @@
    (subtype/expr
     ;; Convert the argument type variable into an existential tvar
     [env-entry_0 ... (?i var_sm) (^ tvar) ...] archive_0
-    (Array (subst* atmtype_lo [(tvar (^ tvar)) ...]) {++ shp_f shp_c})
+    (subst* (Array atmtype_lo {++ shp_f shp_c}) [(tvar (^ tvar)) ...])
     (Array atmtype_hi shp_hi)
     env_1 archive_1 e:ectx)
    (where [env-entry_1 ... (?i var_sm)_ ...] env_1)
@@ -478,7 +484,7 @@
    (subtype/expr
     ;; Convert the argument type variable into an existential tvar
     [env-entry_0 ... (?i var_sm) (^ ivar) ...] archive_0
-    (Array (subst* atmtype_lo [(ivar (^ ivar)) ...]) {++ shp_f shp_c})
+    (subst* (Array atmtype_lo {++ shp_f shp_c}) [(ivar (^ ivar)) ...])
     (Array atmtype_hi shp_hi)
     env_1 archive_1 e:ectx)
    (where [env-entry_1 ... (?i var_sm)_ ...] env_1)
@@ -518,7 +524,28 @@
                  (Array atmtype_0 shp_0)
                  (Array atmtype_1 shp_1)
                  env_2 archive_2
-                 (lift-atom-coercion e:actx))])
+                 (lift-atom-coercion e:actx))]
+  ;; Here we have something regular but need to put it in the form used by
+  ;; irregular data.
+  [(where var_sm ,(gensym 'SM_))
+   (subtype/expr
+    [env-entry_0 ... (?i var_sm) (^ ivar) ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (subst* (Array atmtype_hi {++ shp_f shp_c}) [(ivar (^ ivar)) ...])
+    env_1 archive_1 e:ectx)
+   (where [env-entry_1 ... (?i var_sm)_ ...] env_1)
+   --- sub:ΣR
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array atmtype_lo shp_lo)
+    (Array (Σ [ivar ...] (Array atmtype_hi shp_c)) shp_f)
+    [env-entry_1 ...] archive_1
+    (apply-env/e:ectx env_1
+                      (coerce-each
+                       (subst* (Array atmtype_hi shp_c) [(ivar (^ ivar)) ...])
+                       (array []
+                              {(box (^ ivar) ... hole
+                                    (Σ [(ivar->bind ivar) ...] (Array atmtype_hi shp_c)))}))))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Subtype instantiation judgments
