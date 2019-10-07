@@ -972,13 +972,13 @@
   #:contract (instR/arrays env archive
                           [(^ arrvar) ...] [arrtype ...]
                           env archive [e:ectx ...])
-  [--- atmL*:base
+  [--- atmR*:base
    (instR/arrays env archive [] [] env archive [])]
-  [(instR/array env_0 archive_0 (^ arrvar_0) arrtype_0 env_1 archive_1 e:ectx_0)
+  [(instR/array env_0 archive_0 arrtype_0 (^ arrvar_0) env_1 archive_1 e:ectx_0)
    (instR/arrays env_1 archive_1
                  [arrtype_1 ...] [(^ arrvar_1) ...]
                  env_2 archive_2 [e:ectx_1 ...])
-   --- atmL*
+   --- atmR*
    (instR/arrays env_0 archive_0
                  [arrtype_0 arrtype_1 ...] [(^ arrvar_0) (^ arrvar_1) ...]
                  env_2 archive_2 [e:ectx_0 e:ectx_1 ...])])
