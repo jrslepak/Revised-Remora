@@ -690,18 +690,49 @@
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
-  [(where #f (monotype? atmtype))
-   (where exatmvar (^ ,(gensym 'elt_)))
+  [(where [tvar_in ...]
+     ,(build-list (length (term [arrtype_in ...]))
+                  (λ (n) (gensym (format "*~a-in~a_"
+                                         (substring (symbol->string (term tvar)) 1)
+                                         n)))))
+   (where tvar_out ,(gensym (format "*~a-out_"
+                                    (substring (symbol->string (term tvar)) 1))))
+   (where svar_frm ,(gensym (format "@~a-frm_"
+                                    (substring (symbol->string (term tvar)) 1))))
+   (instR/arrays [env-entry_l ...
+                  (^ tvar_in) ... (^ tvar_out) (^ svar_frm)
+                  (^ tvar (Array (-> [(^ tvar_in) ...] (^ tvar_out)) (^ svar_frm)))
+                  env-entry_r ...]
+                 archive_0
+                 [arrtype_in ...] [(^ tvar_in) ...]
+                 env_1 archive_1 [e:ectx_in ...])
+   (instL/array env_1 archive_1 (^ tvar_out) arrtype_out
+                env_2 archive_2 e:ectx_out)
+   --- ArrL:->
+   (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
+                (^ tvar) (Array (-> [arrtype_in ...] arrtype_out) shp_f)
+                env_2 archive_2
+                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...]
+                             [e:ectx_in ...] e:ectx_out))]
+  [#;(side-condition ,(printf "Monotype check on ~v: ~v\n"
+                            (term atmtype)
+                            (term (monotype? atmtype))))
+   #;(where #t (monotype? atmtype))
+   (where exatmvar (^ ,(gensym '&elt_)))
+   ;(side-condition ,(printf "New env entry: ~v\n" (term exatmvar)))
+   (where exsvar (^ ,(gensym '@shp_)))
+   ;(side-condition ,(printf "New env entry: ~v\n" (term exsvar)))
    (instL/atom [env-entry_l ...
-                exatmvar (^ tvar (Array exatmvar shp))
+                exatmvar exsvar (^ tvar (Array exatmvar exsvar))
                 env-entry_r ...]
                archive_0
                exatmvar atmtype
                env_1 archive_1 e:actx)
+   (equate env_1 archive_1 exsvar shp env_2 archive_2)
    --- ArrL:array
    (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (^ tvar) (Array atmtype shp)
-                env_1 archive_1
+                env_2 archive_2
                 (lift-atom-coercion e:actx))])
 
 (define-judgment-form Remora-elab
@@ -750,18 +781,43 @@
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
-  [(where #f (monotype? atmtype))
-   (where exatmvar (^ ,(gensym 'elt_)))
+  [(where [tvar_in ...]
+     ,(build-list (length (term [arrtype_in ...]))
+                  (λ (n) (gensym (format "*~a-in~a_"
+                                         (substring (symbol->string (term tvar)) 1)
+                                         n)))))
+   (where tvar_out ,(gensym (format "*~a-out_"
+                                    (substring (symbol->string (term tvar)) 1))))
+   (where svar_frm ,(gensym (format "@~a-frm_"
+                                    (substring (symbol->string (term tvar)) 1))))
+   (instL/arrays [env-entry_l ...
+                  (^ tvar_in) ... (^ tvar_out) (^ svar_frm)
+                  (^ tvar (Array (-> [(^ tvar_in) ...] (^ tvar_out)) (^ svar_frm)))
+                  env-entry_r ...]
+                 archive_0
+                 [(^ tvar_in) ...] [arrtype_in ...]
+                 env_1 archive_1 [e:ectx_in ...])
+   (instR/array env_1 archive_1 arrtype_out (^ tvar_out)
+                env_2 archive_2 e:ectx_out)
+   --- ArrR:->
+   (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
+                (Array (-> [arrtype_in ...] arrtype_out) shp_f) (^ tvar)
+                env_2 archive_2
+                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...]
+                             [e:ectx_in ...] e:ectx_out))]
+  [(where exatmvar (^ ,(gensym '&elt_)))
+   (where exsvar (^ ,(gensym '@shp_)))
    (instR/atom [env-entry_l ...
-                (^ tvar (Array exatmvar shp)) exatmvar
+                exatmvar exsvar (^ tvar (Array exatmvar exsvar))
                 env-entry_r ...]
                archive_0
-               exatmvar atmtype
+               atmtype exatmvar
                env_1 archive_1 e:actx)
-   --- ArrL:array
+   (equate env_1 archive_1 exsvar shp env_2 archive_2)
+   --- ArrR:array
    (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (Array atmtype shp) (^ tvar)
-                env_1 archive_1
+                env_2 archive_2
                 (lift-atom-coercion e:actx))])
 
 
