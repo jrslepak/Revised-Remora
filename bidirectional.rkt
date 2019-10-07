@@ -430,8 +430,6 @@
     hole)]
   [--- sub:arrvar
    (subtype/expr env archive arrvar arrvar env archive hole)]
-  [(subtype/expr env archive arrvar arrvar env archive hole)
-   sub-arrvar]
   [(equate env_0 archive_0 shp_fl shp_fh env_1 archive_1)
    (subtype/exprs env_1 archive_1
                   [arrtype_inh ...] [arrtype_inl ...]
@@ -580,28 +578,29 @@
   ;; If the goal is an exvar bound later, solve that exvar instead.
   [--- AtmL:reach
    (instL/atom
-    [env-entry_l ... (^ tvar_lo) env-entry_m ... (^ tvar_hi) env-entry_m ...]
+    [env-entry_l ... (^ tvar_lo) env-entry_m ... (^ tvar_hi) env-entry_r ...]
     archive
     (^ tvar_lo) (^ tvar_hi)
     [env-entry_l ...
      (^ tvar_lo) env-entry_m ...
-     (^ tvar_hi (^ tvar_lo)) env-entry_m ...]
+     (^ tvar_hi (^ tvar_lo)) env-entry_r ...]
     archive hole)]
   ;; If the goal is an exvar bound later and already solved, propagate that
   ;; solution back to the earlier existential.
-  [(kind-atm [env-entry_l ...] atmtype)
+  [(instL/atom [env-entry_l ...
+                (^ tvar_lo) env-entry_m ...
+                (^ tvar_hi atmtype) env-entry_r ...]
+               archive_0
+               (^ tvar_lo) atmtype
+               env_1 archive_1 e:actx)
    --- AtmL:reach*
    (instL/atom
     [env-entry_l ...
      (^ tvar_lo) env-entry_m ...
-     (^ tvar_hi atmtype) env-entry_m ...]
-    archive
+     (^ tvar_hi atmtype) env-entry_r ...]
+    archive_0
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ...
-     (^ tvar_lo atmtype) env-entry_m ...
-     (^ tvar_hi atmtype) env-entry_m ...]
-    archive
-    hole)])
+    env_1 archive_1 e:actx)])
 
 (define-judgment-form Remora-elab
   #:mode (instR/atom I I I I O O O)
@@ -629,18 +628,20 @@
      (^ tvar_hi) env-entry_m ...
      (^ tvar_lo (^ tvar_hi)) env-entry_r ...]
     archive hole)]
-  [(kind-atm [env-entry_l ...] atmtype)
+  [(instR/atom [env-entry_l ...
+                (^ tvar_hi) env-entry_m ...
+                (^ tvar_lo atmtype) env-entry_r ...]
+               archive_0
+               atmtype (^ tvar_hi)
+               env_1 archive_1 e:actx)
    --- AtmR:reach*
    (instR/atom
     [env-entry_l ...
      (^ tvar_hi) env-entry_m ...
      (^ tvar_lo atmtype) env-entry_r ...]
-    archive
+    archive_0
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ...
-     (^ tvar_hi atmtype) env-entry_m ...
-     (^ tvar_lo atmtype) env-entry_r ...]
-    archive hole)])
+    env_1 archive_1 e:actx)])
 
 
 (define-judgment-form Remora-elab
@@ -672,18 +673,20 @@
      (^ tvar_lo) env-entry_m ...
      (^ tvar_hi (^ tvar_lo)) env-entry_r ...]
     archive hole)]
-  [(kind-array [env-entry_l ...] arrtype)
+  [(instL/array [env-entry_l ...
+                 (^ tvar_lo) env-entry_m ...
+                 (^ tvar_hi arrtype) env-entry_r ...]
+                archive_0
+                (^ tvar_lo) arrtype
+                env_1 archive_1 e:ectx)
    --- ArrL:reach*
    (instL/array
     [env-entry_l ...
      (^ tvar_lo) env-entry_m ...
      (^ tvar_hi arrtype) env-entry_r ...]
-    archive
+    archive_0
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ...
-     (^ tvar_lo arrtype) env-entry_m ...
-     (^ tvar_hi arrtype) env-entry_r ...]
-    archive hole)]
+    env_1 archive_1 e:ectx)]
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
@@ -730,18 +733,20 @@
      (^ tvar_hi) env-entry_m ...
      (^ tvar_lo (^ tvar_hi)) env-entry_r ...]
     archive hole)]
-  [(kind-array [env-entry_l ...] arrtype)
+  [(instR/array [env-entry_l ...
+                 (^ tvar_hi) env-entry_m ...
+                 (^ tvar_lo arrtype) env-entry_r ...]
+                archive_0
+                arrtype (^ tvar_hi)
+                env_1 archive_1 e:ectx)
    --- ArrR:reach*
    (instR/array
     [env-entry_l ...
      (^ tvar_hi) env-entry_m ...
      (^ tvar_lo arrtype) env-entry_r ...]
-    archive
+    archive_0
     (^ tvar_lo) (^ tvar_hi)
-    [env-entry_l ...
-     (^ tvar_hi arrtype) env-entry_m ...
-     (^ tvar_lo arrtype) env-entry_r ...]
-    archive hole)]
+    env_1 archive_1 e:ectx)]
   ;;----------------------------------------------------------------------------
   ;; "De-structural" rules
   ;;----------------------------------------------------------------------------
