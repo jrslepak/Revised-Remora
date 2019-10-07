@@ -33,7 +33,10 @@
   (arrmono .... exarrvar)
   (extvar (^ tvar))
   (exdvar (^ dvar))
-  (dim .... exdvar)
+  (positive-integer (side-condition (name n natural) (> (term n) 0)))
+  (dim .... exdvar
+       ;;; Trying this version of "more permissive environment"
+       {- idx idx} {* natural idx} {/ idx positive-integer})
   (adim .... exdvar)
   (exsvar (^ svar))
   (shp .... exsvar))
@@ -280,6 +283,12 @@
   [(apply-env/e:idx _ natural) natural]
   [(apply-env/e:idx env {+ idx ...})
    {+ (apply-env/e:idx env idx) ...}]
+  [(apply-env/e:idx env {- idx ...})
+   {- (apply-env/e:idx env idx) ...}]
+  [(apply-env/e:idx env {* idx ...})
+   {* (apply-env/e:idx env idx) ...}]
+  [(apply-env/e:idx env {/ idx ...})
+   {/ (apply-env/e:idx env idx) ...}]
   [(apply-env/e:idx env {Shp idx ...})
    {Shp (apply-env/e:idx env idx) ...}]
   [(apply-env/e:idx env {++ idx ...})

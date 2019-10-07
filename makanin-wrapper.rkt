@@ -351,7 +351,7 @@
 (module+ test
   (check-true
    (redex-check
-    Remora-elab dim
+    Remora-implicit dim
     (equal? (dim->coeff-hash (term dim))
             (dim->coeff-hash (coeff-hash->dim (dim->coeff-hash (term dim)))))
     #:print? #f)))
