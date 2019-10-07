@@ -354,7 +354,7 @@
                expr_arg (Array atmtype_in {++ shp_afrm shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 shp_afrm {++ (^ svar_fext) shp_fun}
+   (equate env_1 archive_1 shp_afrm {++ shp_fun (^ svar_fext)}
            env_2 archive_2)
    (synth-app env_2 archive_2
               e:expr_fun
