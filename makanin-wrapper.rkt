@@ -197,7 +197,13 @@
                                          (term (^ @s))
                                          (term {Shp (^ $n)})))
                 '([(^ $s0) (^ @s {Shp (^ $s0)}) (^ $n (^ $s0))]
-                  [(≐ (^ $n) (^ $s0))])))
+                  [(≐ (^ $n) (^ $s0))]))
+  (check-equal? (stream-first (solutions (term [(^ @s) (^ $n)])
+                                         (term [])
+                                         (term (^ @s))
+                                         (term {Shp (^ $n) (^ $n)})))
+                '([(^ $s0) (^ $s1 (^ $s0)) (^ @s {Shp (^ $s0) (^ $s1)}) (^ $n (^ $s1))]
+                  [(≐ (^ $n) (^ $s0) (^ $s1))])))
 
 ;;; Translate shp from redex's representation into makanin/solve representation
 (define ((shp->sequence ids) s)
