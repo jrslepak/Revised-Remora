@@ -31,46 +31,117 @@
 ;;; Env Archive [Hash Nat [Dim U SVar]] [Hash SVar [Listof Nat]] [Listof [Set Nat]]
 ;;; -> [List Env Archive] U #f
 (define (update-env env archive id->idx sym->id-list id-eqv-reln)
-  #;(printf "(update-env\n ~v\n ~v\n ~v\n ~v\n ~v)\n\n"
-            env archive id->idx sym->id-list id-eqv-reln)
   (define dim-eqv-reln
     (for/list ([id-eqv-class id-eqv-reln])
               ;; Convert each sequence component ID to a Remora index.
               (define new-class
-                (for/list ([id id-eqv-class])
-                          (define mapped (hash-ref id->idx id))
-                          (if (hash? mapped)
-                              (coeff-hash->dim mapped)
-                              mapped)))
+                (for/set ([id id-eqv-class])
+                         (define mapped (hash-ref id->idx id))
+                         (if (hash? mapped)
+                             (coeff-hash->dim mapped)
+                             mapped)))
               ;; If everything in this equivalence class actually is a dim,
               ;; produce a list of dims. If it is a singleton class containing
               ;; a universal svar, produce an empty class. If it contains an
               ;; svar but is a non-singleton, produce #f as the equivalence
               ;; class to indicate an invalid equivalence class was given by
               ;; the sequence equation solver.
-              (cond [(and (= 1 (length new-class))
-                          (svar? (first new-class)))
-                     '()]
+              (cond [(and (= 1 (set-count new-class))
+                          (svar? (set-first new-class)))
+                     (set)]
                     [(for/or ([idx new-class]) (svar? idx)) #f]
                     [else new-class])))
   ;; If any equivalence class was marked as invalid, return #f.
-  (and (for/and ([c dim-eqv-reln]) (list? c))
+  (and (for/and ([c dim-eqv-reln]) (set? c))
        ;; At this point, we know the equivalence relation only relates dims with
        ;; dims and universal shape variables with themselves.
        (let* (;; TODO: How to handle partially constrained existential svars?
-              [sym->idx-list (translate-soln sym->id-list id->idx id-eqv-reln)]
-              #;[_ (printf "Index solution structure:\n~v\n\n" sym->idx-list)]
-              [env/dvars (resolve-dvars env dim-eqv-reln)]
-              [env/svars (resolve-svars env/dvars sym->idx-list)]
+              ;[sym->idx-list (translate-soln sym->id-list id->idx id-eqv-reln)]
+              [sym->idx-list (elaborate-svars sym->id-list id->idx)]
+              [env/elaborated (elaborate-exsvar-entries env sym->idx-list)]
+              [dim-eqv-reln/fresh-dvars
+               (for/fold ([eqv dim-eqv-reln])
+                         ([svar (hash-keys sym->idx-list)])
+               (augment-eqv-reln eqv
+                                 (hash-ref sym->idx-list svar)
+                                 (hash-ref sym->id-list svar)
+                                 id->idx))]
+              [env/dvars (resolve-dvars env/elaborated dim-eqv-reln/fresh-dvars)]
               [archive/new-eqv-reln
-                  (append (for/list ([dim-eqv-class dim-eqv-reln]
-                                     #:unless (= 1 (length dim-eqv-class)))
-                                    (cons '≐ dim-eqv-class))
+                  (append (for/list ([dim-eqv-class dim-eqv-reln/fresh-dvars]
+                                     #:unless (= 1 (set-count dim-eqv-class)))
+                                    (cons '≐ (set->list dim-eqv-class)))
                           archive)])
-         (list env/svars archive/new-eqv-reln))))
+         (list env/dvars archive/new-eqv-reln))))
 
-;;; TODO: convert two Remora shapes into the form demanded by makanin/solve,
-;;; invoke the solver, and generate updated environment for each result
+;;; Generate fresh existential dimension variables for positions in a solved
+;;; existential shape variable which correspond to single dimensions, and leave
+;;; positions corresponding to universal shape variables as those variables.
+;;; [Hash SVar [Listof Nat]] [Hash Nat [Dim U Svar]]
+;;; -> [Listof Shp]
+(define (elaborate-svars sym->id-list id->idx)
+  (for/hash
+   ([(svar _) sym->id-list])
+   (values
+    svar
+    (for/list
+     ([component-id (hash-ref sym->id-list svar '())]
+      [i (in-naturals)])
+     (if (svar? (hash-ref id->idx component-id))
+         (hash-ref id->idx component-id)
+         `(Shp (^ ,(string->symbol (format
+                                    "$~a~a"
+                                    (substring
+                                     (symbol->string svar) 1) i)))))))))
+
+;;; For each svar in the given solution hash, elaborate piece of the environment
+;;; to include entries for the newly-generated ^dvar components.
+;;; Env [Hash SVar [Listof Shp]] -> Env
+(define (elaborate-exsvar-entries env sym->idx-list)
+  (match env
+    [(cons (list '^ (? svar? svar)) rest-env)
+     (define new-entries
+       (for/list ([component (hash-ref sym->idx-list svar '())]
+                  #:when (and (list? component)
+                              (> (length component) 1)
+                              (exdvar? (second component))))
+                 (second component)))
+     (append new-entries
+             (list
+              (if (hash-has-key? sym->idx-list svar)
+                  `(^ ,svar ,(term (Inormalize-idx
+                                    ,(cons '++ (hash-ref sym->idx-list svar)))))
+                  `(^ ,svar)))
+             (elaborate-exsvar-entries rest-env sym->idx-list))]
+    [(cons env-entry rest-env)
+     (cons env-entry (elaborate-exsvar-entries rest-env sym->idx-list))]
+    ['() '()]))
+
+;;; Expand the equivalence class for each component id mentioned in the shape
+;;; variable's solution to include the existential dimension variable generated
+;;; for the corresponding position.
+;;; [Listof [Set Remora-elab:dim]] [Listof Shp] [Listof Nat] [Hash Nat [Dim U SVar]]
+;;; -> [Listof [Set Nat]]
+(define (augment-eqv-reln dim-eqv-reln fresh-components component-ids id->idx)
+  ;; Update each equivalence class. If an element ID which appears at the same
+  ;; position within component-ids where an existential dimension variable
+  ;; appears within fresh-components, and the index corresponding to that ID is
+  ;; already in this equivalence class, then include the fresh ^dvar in this
+  ;; class as well.
+  (for/list
+   ([eqv-class dim-eqv-reln])
+   (define new-elements
+     (for/set ([fc fresh-components]
+               [id component-ids]
+               #:when (and (list? fc)
+                           (> (length fc) 1)
+                           (exdvar? (second fc))
+                           (set-member? eqv-class (hash-ref id->idx id #f))))
+              (second fc)))
+   (set-union eqv-class new-elements)))
+
+;;; Convert two Remora shapes into the form demanded by makanin/solve,
+;;; invoke the solver, and generate updated environment for each result.
 ;;; Env Archive Shp Shp -> [Stream [List Env Archive]]
 (define (solutions env archive left right)
   (define univ-svars (set-union (list->set (unique-univ-svars left))
@@ -84,25 +155,12 @@
                           (coeff-hash->dim hash-idx)
                           hash-idx))))
   (define idx->id (second id-tables))
-  #;(printf "SeqElt ID table:\n~v\n\n" (first id-tables))
   (define solns
     (solve-monoid-eqn*/t ((shp->sequence idx->id) left)
                          ((shp->sequence idx->id) right)))
   ;; Convert the equivalence relation on sequence element ID numbers into an
   ;; equivalence relation on syntactically encoded dims, and translate the
   ;; assignment so that its codomain is syntactic dims instead of ID numbers.
-  ;; TODO: Try case where ^svar solution depends on later-bound ^dvars.
-  ;; For example: [^@s, ..., ^$d, ^$e]  with ^@s resolved to one of {^$d, ^$e}
-  ;; What substitution works for ^@s where ^$d and ^$e are not yet in scope?
-  ;; Maybe add new exvar elements to the environment right before ^@s, similar
-  ;; to refining the structure of a type as we discover how it is used? Then
-  ;; instead of trying to produce something like
-  ;;   [^@s ↦ {Shp ^$d ^$d}, ..., ^$d, ^$e ↦ ^$d]
-  ;; we instead produce
-  ;;   [^$f, ^@s ↦ {Shp ^$f ^$f}, ..., ^$d ↦ ^$f, ^$e ↦ ^$d]
-  ;; As an exceptional case, if any position in an ex-svar's assignment is a
-  ;; univ-svar that isn't in scope yet, then this is not a feasible solution
-  ;; because it constrains a universal to have a particular value.
   ;; TODO: Consistency check for updated archive
   (define translated-solns
     (for/stream ([s solns])
@@ -112,15 +170,16 @@
   translated-solns)
 (module+ test
   (check-equal? (stream->list (solutions '[] '[] '{Shp} '{Shp}))
-                '(([] ())))
+                '(([] [])))
   (check-equal? (stream->list (solutions '[] '[] '{Shp 4} '{Shp 4}))
-                '(([] ())))
+                '(([] [])))
   (check-equal? (stream->list (solutions '[(^ @s)] '[] '(^ @s) '{Shp}))
                 '(([(^ @s (Shp))]
                    [])))
   (check-equal? (stream->list (solutions '[(^ @s)] '[] '(^ @s) '{Shp 5}))
-                '(([(^ @s (Shp 5))]
-                   [])))
+                '(([(^ $s0 5)
+                    (^ @s (Shp (^ $s0)))]
+                   [(≐ (^ $s0) 5)])))
   (check-equal? (stream->list (solutions '[@s] '[] '@s '{Shp}))
                 '())
   (check-equal? (stream-first (solutions (term [(^ $x) (^ $y) (^ @s)])
@@ -129,8 +188,16 @@
                                          (term {++ {Shp 5} (^ @s)})))
                 '([(^ $x 5)
                    (^ $y)
-                   (^ @s (Shp (^ $y)))]
-                  [(≐ (^ $x) 5)])))
+                   (^ $s0 (^ $y))
+                   (^ @s (Shp (^ $s0)))]
+                  [(≐ (^ $y) (^ $s0))
+                   (≐ (^ $x) 5)]))
+  (check-equal? (stream-first (solutions (term [(^ @s) (^ $n)])
+                                         (term [])
+                                         (term (^ @s))
+                                         (term {Shp (^ $n)})))
+                '([(^ $s0) (^ @s {Shp (^ $s0)}) (^ $n (^ $s0))]
+                  [(≐ (^ $n) (^ $s0))])))
 
 ;;; Translate shp from redex's representation into makanin/solve representation
 (define ((shp->sequence ids) s)
@@ -184,6 +251,28 @@
         (for/hash ([pair idx-mapping])
                   (values (second pair) (first pair)))))
 
+;;; Convert a solution which maps existential shape variables to component IDs
+;;; into a solution which maps them to sets of indices.
+;;; [Hash SVar [Listof Nat]]
+;;; [Hash Nat Idx]
+;;; [Listof [Set Nat]]
+;;; -> [Hash SVar [Listof [Set Shp]]
+(define (translate-soln id-soln id->idx id-eqv-reln)
+  (for/hash
+   ([(svar ids) id-soln]
+    #:when (for/and ([id ids]) id))
+   (values
+    svar
+    (for/list ([id ids])
+              ;; Find the equivalence class that contains this ID
+              (define eqv-class
+                (for/first ([c id-eqv-reln] #:when (set-member? c id)) c))
+              (for/set ([id eqv-class])
+                       (define mapped-val (hash-ref id->idx id))
+                       (if (svar? mapped-val)
+                           mapped-val
+                           `(Shp ,mapped-val)))))))
+
 ;;; Wrapper around resolve-dvars/rev, described below
 (define (resolve-dvars env eqv-reln)
   (reverse (resolve-dvars/rev (reverse env) (set) eqv-reln)))
@@ -213,7 +302,6 @@
     ;; Search the equivalence relation for a solution. Add the result into the
     ;; environment, and recur on the rest, forbidding this exvar.
     [(cons (list '^ (? dvar? d)) rest-env)
-     #;(printf "Can we pick an answer for ~v?\n" d)
      (cons (resolve-dvar (first rev-env) forbidden-dvars eqv-reln)
            (resolve-dvars/rev rest-env
                               (set-add forbidden-dvars (list '^ d))
@@ -222,6 +310,35 @@
     [(cons _ rest-env)
      (cons (first rev-env)
            (resolve-dvars/rev rest-env forbidden-dvars eqv-reln))]))
+
+;;; Use an equivalence relation to find a way to rewrite a dimension variable
+;;; in terms of other dimension variables not marked as "forbidden."
+;;; ExDimVar [Set DimVar] [Listof [Set Dim]] -> [List '^ DimVar Dim]
+(define (resolve-dvar dvar forbidden-dvars eqv-reln)
+  ;; Find a specific equation to use. This must be two dimensions in the same
+  ;; equivalence class which have differing coefficients for dvar and equal
+  ;; coefficients for each forbidden variable. If no such equation is available,
+  ;; return #f.
+  (define (eqv-class->eqn eqv-class)
+    (or (set-empty? eqv-class)
+        (let ([lhs (set-first eqv-class)])
+          (for/first ([rhs (set-rest eqv-class)]
+                      #:when (and (not (= (coefficient dvar lhs)
+                                          (coefficient dvar rhs)))
+                                  (for/and ([fv forbidden-dvars])
+                                           (= (coefficient fv lhs)
+                                              (coefficient fv rhs)))))
+                     (list lhs rhs)))))
+  (define found-equality
+    (for/first ([eqv-class eqv-reln]
+                #:when (eqv-class->eqn eqv-class))
+               (eqv-class->eqn eqv-class)))
+  (if found-equality
+      ;; With the two sides of the equation rewritten as coefficient hashes,
+      ;; isolate the chosen variable.
+      `(^ ,(second dvar) ,(isolate dvar (first found-equality) (second found-equality)))
+      `(^ ,(second dvar))))
+
 
 ;;; Does this dimension mention the variable?
 (define (mentions? dvar dim)
@@ -284,7 +401,10 @@
   (check-equal? (coefficient (term $x) (term {+ 3 $y {- $z $x}})) -1)
   (check-equal? (coefficient 1 (term {+ 13 $y {- $z 15}})) -2))
 
+
+;;;;----------------------------------------------------------------------------
 ;;;; Tools for simplifying a dimension
+;;;;----------------------------------------------------------------------------
 
 ;;; Convert a syntactic dim to a coefficient hash representation
 (define (dim->coeff-hash dim)
@@ -306,7 +426,6 @@
 
 ;;; Convert a coefficient hash back to a somewhat pretty-printed syntactic dim
 (define (coeff-hash->dim coeffs)
-  #;(printf "Converting ~v\n" coeffs)
   (define common-denominator
     (apply lcm (for/list ([c (hash-values coeffs)]
                           #:unless (zero? c))
@@ -372,89 +491,6 @@
      ((coeff-hash-binop -) lhs rhs))))
   (coeff-hash->dim soln-hash))
 
-;;; Use an equivalence relation to find a way to rewrite a dimension variable
-;;; in terms of other dimension variables not marked as "forbidden."
-;;; ExDimVar [Set DimVar] [Listof [Set Dim]] -> [List '^ DimVar Dim]
-(define (resolve-dvar dvar forbidden-dvars eqv-reln)
-  ;; Find a specific equation to use. This must be two dimensions in the same
-  ;; equivalence class which have differing coefficients for dvar and equal
-  ;; coefficients for each forbidden variable. If no such equation is available,
-  ;; return #f.
-  #;(printf "\tUsing equivalence relation ~v\n" eqv-reln)
-  (define (eqv-class->eqn eqv-class)
-    (or (set-empty? eqv-class)
-        (let ([lhs (set-first eqv-class)])
-          (for/first ([rhs (set-rest eqv-class)]
-                      #:when (and (not (= (coefficient dvar lhs)
-                                          (coefficient dvar rhs)))
-                                  (for/and ([fv forbidden-dvars])
-                                           (= (coefficient fv lhs)
-                                              (coefficient fv rhs)))))
-                     (list lhs rhs)))))
-  (define found-equality
-    (for/first ([eqv-class eqv-reln]
-                #:when (eqv-class->eqn eqv-class))
-               (eqv-class->eqn eqv-class)))
-  #;(printf "\tFound equality: ~v\n" found-equality)
-  (if found-equality
-      ;; With the two sides of the equation rewritten as coefficient hashes,
-      ;; isolate the chosen variable.
-      `(^ ,(second dvar) ,(isolate dvar (first found-equality) (second found-equality)))
-      `(^ ,(second dvar))))
-
-
-;;; Similar to resolve-dvar, but for resolving shape variables. The solver's
-;;; shape solution is a hash which maps shape variables to sequences of element
-;;; IDs. Each element ID might mean any one of several dimensions, as specified
-;;; by the associated equivalence relation returned by the solver.
-;;; TODO: If all dims in the eqv class specified for some position mention an
-;;; exvar that is out of scope, we can introduce a new one immediately before
-;;; this shape exvar. This will rely on some other code to filter out cases
-;;; where the equivalence relation has a term using an exvar equated with a
-;;; term using a later-bound univar.
-;;; SVar
-;;; [Hash SVar [Listof Nat]]
-;;; [Listof [Set Nat]]
-;;; [Hash Nat Dim]
-;;; [Listof DVar]
-;;; -> [[Listof Shp] U #f]
-#;
-(define (resolve-svar svar svar-subst id-eqv-reln id->dim forbidden-vars)
-  (define positional-solutions
-    (for/list ([dim-id (hash-ref svar-subst svar '())])
-              ;; Identify the equivalence class of dim ID numbers that contains
-              ;; dim-id, and pick one from that class which stands for a dim
-              ;; which uses no forbidden variables.
-              (define id-eqv-class
-                (for/first ([c id-eqv-reln] #:when (set-member? c dim-id)) c))
-              (define dim-eqv-class
-                (for/list ([id id-eqv-class]) (hash-ref id->dim id)))
-              (for/first
-                   ([dim dim-eqv-class]
-                    #:when (for/and ([fv forbidden-vars])
-                                    (not (mentions? fv dim))))
-                   dim)))
-  ;; If every position has a solution, return that list of solutions. Ohherwise,
-  ;; return false.
-  (if (for/and ([s positional-solutions]) s)
-      positional-solutions
-      #f))
-
-;;; For each position in an SVar's solution, choose a candidate index which does
-;;; not mention any forbidden variables. If no such solution is available for
-;; some component, return #f.
-;;; [Set Var] [Listof [Set Shp]] -> Shp U #f
-(define (resolve-svar forbidden-vars components)
-  (define specific-pieces
-    (for/list ([c components])
-              #;(printf "Possibilities: ~v\n" c)
-              (for/first ([s c]
-                          #:when (set-empty? (set-intersect (shp->ivars s)
-                                                            forbidden-vars)))
-                         s)))
-  #;(printf "Specific pieces: ~v\n" specific-pieces)
-  (and (for/and ([s specific-pieces]) s)
-       (term (Inormalize-idx ,(cons '++ specific-pieces)))))
 
 ;;; Construct the set of index variables mentioned in a shape
 ;;; Shp -> [Set IVar]
@@ -471,87 +507,3 @@
     [(or (? dvar? _) (list '^ (? dvar? _))) (set d)]
     [(? natural? _) (set)]
     [(list '+ dims ...) (apply set-union (set) (map dim->dvars dims))]))
-
-
-;;; In a reversed environment, resolve all svars that have a solution in the
-;;; given solution hash, subject to the chosen equivalence relation on dimension
-;;; IDs and mapping from IDs to dimensions.
-;;; Env [Hash SVar [Listof Shp]] [Set IVar] [Kont Bool]
-;;; -> Env U #f
-(define (resolve-svars/rev rev-env forbidden-vars svar->idx-list bailout)
-  (match rev-env
-    ['() '()]
-    ;; Resolved existential variable: add to forbidden set
-    [(cons (list '^ (? ivar? v) (? idx? _)) rest-env)
-     (cons (first rev-env)
-           (resolve-svars/rev rest-env
-                              (set-add forbidden-vars (list '^ v))
-                              svar->idx-list
-                              bailout))]
-    ;; Universal variable: add to forbidden set
-    [(cons (? ivar? v) rest-env)
-     (cons v (resolve-svars/rev rest-env
-                                (set-add forbidden-vars v)
-                                svar->idx-list
-                                bailout))]
-    ;; Unresolved dimension variable: add to forbidden set
-    [(cons (list '^ (? dvar? v)) rest-env)
-     (cons (first rev-env)
-           (resolve-svars/rev rest-env
-                              (set-add forbidden-vars (list '^ v))
-                              svar->idx-list
-                              bailout))]
-    ;; Unresolved shape variable: try to solve it
-    [(cons (list '^ (? svar? v)) rest-env)
-     #;(printf "Try to resolve ~v\n" (first rev-env))
-     (define component-solns (hash-ref svar->idx-list v #f))
-     #;(printf "  Components' candidate solutions: ~v\n" component-solns)
-     (define shp-soln
-       (if component-solns (list (resolve-svar forbidden-vars component-solns)) '()))
-     (if shp-soln
-         (cons (append (first rev-env) shp-soln)
-               (resolve-svars/rev rest-env
-                                  (set-add forbidden-vars (list '^ v))
-                                  svar->idx-list
-                                  bailout))
-         ;; If there was no scope-respecting solution for any existential shape
-         ;; variable, then we cannot use this candidate solution.
-         (bailout #f))]
-    ;; Otherwise: ignore
-    [(cons _ rest-env)
-     (cons (first rev-env) (resolve-svars/rev rest-env
-                                              forbidden-vars
-                                              svar->idx-list
-                                              bailout))]))
-;;; Given the shapes each component of an existential shape var might stand for,
-;;; pick for each position a shape which mentions only variable that are in
-;;; scope when the existential is bound.
-;;; Env [Hash SVar [List Shp]] -> Env U #f
-(define (resolve-svars env svar->idx-list)
-  (let/ec bailout
-    (reverse (resolve-svars/rev (reverse env) (set) svar->idx-list bailout))))
-
-;;; Convert a solution which maps existential shape variables to component IDs
-;;; into a solution which maps them to sets of indices.
-;;; [Hash SVar [Listof Nat]]
-;;; [Hash Nat Idx]
-;;; [Listof [Set Nat]]
-;;; -> [Hash SVar [Listof [Set Shp]]
-;;; TODO: This will misbehave if an existential shape variable is only partially
-;;; (not fully) constrained. It effectively forgets all constraints placed on
-;;; the shape.
-(define (translate-soln id-soln id->idx id-eqv-reln)
-  (for/hash
-   ([(svar ids) id-soln]
-    #:when (for/and ([id ids]) id))
-   (values
-    svar
-    (for/list ([id ids])
-              ;; Find the equivalence class that contains this ID
-              (define eqv-class
-                (for/first ([c id-eqv-reln] #:when (set-member? c id)) c))
-              (for/set ([id eqv-class])
-                       (define mapped-val (hash-ref id->idx id))
-                       (if (svar? mapped-val)
-                           mapped-val
-                           `(Shp ,mapped-val)))))))
