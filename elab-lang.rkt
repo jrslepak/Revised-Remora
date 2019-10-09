@@ -17,6 +17,7 @@
          apply-env/e:expr apply-env/e:ectx
          apply-env/e:atom apply-env/e:actx
          apply-env/e:type apply-env/e:idx
+         apply-env/type
          subst*
          lift-atom-coercion fn-coercion coerce-each
          arg-env-entries
@@ -39,7 +40,8 @@
        {- idx idx} {* natural idx} {/ idx positive-integer})
   (adim .... exdvar)
   (exsvar (^ svar))
-  (shp .... exsvar))
+  (shp .... exsvar)
+  (fshp .... exsvar))
 (define-extended-language Remora-explicit* Remora-explicit
   (type .... (^ var))
   (idx .... (^ var) {- idx idx} {* natural idx} {/ idx postive-integer})
@@ -78,8 +80,7 @@
 
 (define-metafunction Remora-elab
   Inormalize-idx : idx -> nidx
-  [(Inormalize-idx natural) natural]
-  [(Inormalize-idx ivar) ivar]
+  [(Inormalize-idx nidx) nidx]
   [(Inormalize-idx {Shp dim ...})
    {Shp (Inormalize-idx dim) ...}]
   [(Inormalize-idx {+ dim_0 ... {+ dim_1 ...} dim_2 ...})
@@ -95,14 +96,38 @@
    {+ natural dvar_sorted ...}
    (where {dvar_sorted ...}
      ,(sort (term {dvar ...}) symbol<?))]
+  [(Inormalize-idx {++ shp_0 ... {Shp} shp_1 ...})
+   (Inormalize-idx {++ shp_0 ... shp_1 ...})]
   [(Inormalize-idx {++ shp_0 ... {++ shp_1 ...} shp_2 ...})
    (Inormalize-idx {++ shp_0 ... shp_1 ... shp_2 ...})]
   [(Inormalize-idx {++ shp_0 ... {Shp dim_0 ...} {Shp dim_1 ...} shp_1 ...})
    (Inormalize-idx {++ shp_0 ... {Shp dim_0 ... dim_1 ...} shp_1 ...})]
-  [(Inormalize-idx {++ {Shp dim ...}})
-   {Shp dim ...}]
+  [(Inormalize-idx {++ nshp}) nshp]
   [(Inormalize-idx {++}) {Shp}]
   [(Inormalize-idx {++ dim ...}) {++ dim ...}])
+
+(define-metafunction Remora-elab
+  split-left-dim : nshp -> (ndim nshp) or #f
+  [(split-left-dim {Shp dim_car dim_cdr ...}) (dim_car {Shp dim_cdr ...})]
+  [(split-left-dim {++ {Shp} shp ...})
+   (split-left-dim (Inormalize-idx {++ shp ...}))]
+  [(split-left-dim {++ shp_car shp_cdr ...})
+   (dim_caar {++ shp_cadr shp_cdr ...})
+   (where (dim_caar shp_cadr) (split-left-dim shp_car))]
+  [(split-left-dim {++ _ ...}) #f]
+  [(split-left-dim svar) #f]
+  [(split-left-dim exsvar) #f])
+(define-metafunction Remora-elab
+  split-right-dim : nshp -> (nshp ndim) or #f
+  [(split-right-dim {Shp dim_rdc ... dim_rac}) ({Shp dim_rdc ...} dim_rac)]
+  [(split-right-dim {++ shp ... {Shp}})
+   (split-right-dim (Inormalize-idx {++ shp ...}))]
+  [(split-right-dim {++ shp_rdc ... shp_rac})
+   ({++ shp_rdc ... shp_rdac} dim_raac)
+   (where (shp_rdac dim_raac) (split-right-dim shp_rac))]
+  [(split-right-dim {++ _ ...}) #f]
+  [(split-right-dim svar) #f]
+  [(split-right-dim exsvar) #f])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Utility metafunctions for converting implicit-language types into
@@ -256,22 +281,22 @@
   apply-env/e:type : env e:type -> e:type
   [(apply-env/e:type _ var) var]
   [(apply-env/e:type env (^ var))
-   (apply-env/e:type env type)
+   (apply-env/e:type env (elab-type type))
    (where [_ ... (^ var type) _ ...] env)]
   [(apply-env/e:type _ (^ var)) (^ var)]
   [(apply-env/e:type _ base-type) base-type]
   [(apply-env/e:type env (Array e:type e:idx))
    (Array (apply-env/e:type env e:type)
           (apply-env/e:idx env e:idx))]
-  [(apply-env/e:type env (-> [type_in ...] type_out))
-   (-> [(apply-env/e:type env type_in) ...]
-       (apply-env/e:type env type_out))]
-  [(apply-env/e:type env (∀ [(var kind) ...] type))
-   (∀ [(var kind) ...] (apply-env/e:type env type))]
-  [(apply-env/e:type env (Π [(var sort) ...] type))
-   (Π [(var sort) ...] (apply-env/e:type env type))]
-  [(apply-env/e:type env (Σ [(var sort) ...] type))
-   (Σ [(var sort) ...] (apply-env/e:type env type))])
+  [(apply-env/e:type env (-> [e:type_in ...] e:type_out))
+   (-> [(apply-env/e:type env e:type_in) ...]
+       (apply-env/e:type env e:type_out))]
+  [(apply-env/e:type env (∀ [(var kind) ...] e:type))
+   (∀ [(var kind) ...] (apply-env/e:type env e:type))]
+  [(apply-env/e:type env (Π [(var sort) ...] e:type))
+   (Π [(var sort) ...] (apply-env/e:type env e:type))]
+  [(apply-env/e:type env (Σ [(var sort) ...] e:type))
+   (Σ [(var sort) ...] (apply-env/e:type env e:type))])
 
 (define-metafunction Remora-elab
   apply-env/e:idx : env e:idx -> e:idx
@@ -293,6 +318,46 @@
    {Shp (apply-env/e:idx env idx) ...}]
   [(apply-env/e:idx env {++ idx ...})
    {++ (apply-env/e:idx env idx) ...}])
+
+(define-metafunction Remora-elab
+  apply-env/type : env type -> type
+  [(apply-env/type _ var) var]
+  [(apply-env/type env (^ var))
+   (apply-env/type env type)
+   (where [_ ... (^ var type) _ ...] env)]
+  [(apply-env/type _ (^ var)) (^ var)]
+  [(apply-env/type _ base-type) base-type]
+  [(apply-env/type env (Array type e:idx))
+   (Array (apply-env/type env type)
+          (apply-env/e:idx env e:idx))]
+  [(apply-env/type env (-> [type_in ...] type_out))
+   (-> [(apply-env/type env type_in) ...]
+       (apply-env/type env type_out))]
+  [(apply-env/type env (∀ [var ...] type))
+   (∀ [var ...] (apply-env/type env type))]
+  [(apply-env/type env (Π [var ...] type))
+   (Π [var ...] (apply-env/type env type))]
+  [(apply-env/type env (Σ [var ...] type))
+   (Σ [var ...] (apply-env/type env type))])
+
+(define-metafunction Remora-elab
+  apply-env/env-entry : env env-entry -> env-entry
+  [(apply-env/env-entry env (^ var)) (^ var)]
+  [(apply-env/env-entry env var) var]
+  [(apply-env/env-entry env (?i var)) (?i var)]
+  [(apply-env/env-entry env (evar type))
+   (evar (apply-env/type env type))]
+  [(apply-env/env-entry env (^ ivar idx))
+   (^ ivar (apply-env/e:idx env idx))]
+  [(apply-env/env-entry env (^ tvar type))
+   (^ tvar (apply-env/e:type env type))])
+
+(define-metafunction Remora-elab
+  env-propagation : env -> env
+  [(env-propagation [env-entry_0 ... env-entry_1])
+   [env-entry_new ... (apply-env/env-entry env-entry_1)]
+   (where [env-entry_new ...]
+     (env-propagation [env-entry_0 ...]))])
 
 
 ;;;;----------------------------------------------------------------------------
