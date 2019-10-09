@@ -316,6 +316,11 @@
                e:expr_arg)
    (equate env_1 archive_1 shp_fun {++ shp_afrm (^ svar_aext)}
            env_2 archive_2)
+   ;; If both the function and argument arrays have the same frame shape, then
+   ;; we might use either app:->*f or app:->*a. Prune off this version in that
+   ;; case, to reduce redundant derivation search.
+   (side-condition
+    ,(not (redex-match? Remora-elab [_ ... (^ svar_aext {Shp}) _ ...] (term env_2))))
    ;; Imagine we have a curried function. After consuming only this first
    ;; argument, what shape does the function array have? That is the "frame
    ;; shape so far" at this point in processing the whole n-ary application.
@@ -396,12 +401,21 @@
   [--- sub:atmvar
    (subtype/atom env archive atmvar atmvar env archive hole)]
   [;; TODO: occurs check
+   (side-condition
+    ,(not (redex-match?
+           Remora-elab
+           [(^ atmvar) (^ atmvar)]
+           (term [exatmvar atmtype]))))
    (instL/atom env_0 archive_0 exatmvar atmtype env_1 archive_1 e:actx)
    --- sub:instL/atom
    (subtype/atom env_0 archive_0
                  exatmvar atmtype
                  env_1 archive_1 e:actx)]
   [;; TODO: occurs check
+   ;; If both types are existential variables, we can just use sub:instL/atom,
+   ;; so allowing this as well would lead to lots of redundant backtracking.
+   (side-condition
+    ,(not (redex-match? Remora-elab (^ atmvar) (term atmtype))))
    (instR/atom env_0 archive_0 atmtype exatmvar env_1 archive_1 e:actx)
    --- sub:instR/atom
    (subtype/atom env_0 archive_0
@@ -822,28 +836,127 @@
 
 
 ;;; Provide a judgment-form version of the logic used to interpret the solver's
-;;; results
-;;; TODO: Add "trimming" rules that match up dim* prefixes or suffixes so they
-;;; don't have to be dealt with by the solver.
+;;; results. The actual index-equating judgment is wrapped to ensure it only
+;;; sees normalized indices.
 (define-judgment-form Remora-elab
   #:mode (equate I I I I O O)
   #:contract (equate env archive idx idx env archive)
+  [#;(side-condition ,(printf "Equating ~v and ~v\n" (term idx_0) (term idx_1)))
+   (equate/n env_0 archive_0
+             (Inormalize-idx (apply-env/e:idx env_0 idx_0))
+             (Inormalize-idx (apply-env/e:idx env_0 idx_1))
+             env_1 archive_1)
+   --- equate:normalize
+   (equate env_0 archive_0 idx_0 idx_1 env_1 archive_1)])
+;;; TODO: Add "trimming" rules that match up dim* prefixes or suffixes so they
+;;; don't have to be dealt with by the solver.
+(define-judgment-form Remora-elab
+  #:mode (equate/n I I I I O O)
+  #:contract (equate/n env archive nidx nidx env archive)
+  ;; Are both sides syntactically equal?
+  [--- equate:≡
+   (equate/n env archive shp shp env archive)]
+  ;; Is one side a shape variable?
+  [(sort-shp [env-entry_l ...] shp)
+   --- equate:solveL/shp
+   (equate/n [env-entry_l ... (^ svar) env-entry_r ...] archive_0
+           (^ svar) shp
+           [env-entry_l ... (^ svar shp) env-entry_r ...] archive_0)]
+  [(sort-shp [env-entry_l ...] shp)
+   --- equate:solveR/shp
+   (equate/n [env-entry_l ... (^ svar) env-entry_r ...] archive_0
+           shp (^ svar)
+           [env-entry_l ... (^ svar shp) env-entry_r ...] archive_0)]
+  ;; Is one side a dim variable?
+  [(sort-dim [env-entry_l ...] dim)
+   --- equate:solveL/dim
+   (equate/n [env-entry_l ... (^ dvar) env-entry_r ...] archive_0
+           (^ dvar) dim
+           [env-entry_l ... (^ dvar dim) env-entry_r ...] archive_0)]
+  [(sort-dim [env-entry_l ...] dim)
+   --- equate:solveR/dim
+   (equate/n [env-entry_l ... (^ dvar) env-entry_r ...] archive_0
+           dim (^ dvar)
+           [env-entry_l ... (^ dvar dim) env-entry_r ...] archive_0)]
+  ;; Can we peel a dim off one end?
+  [(where (dim_0 shp_l0) (split-left-dim shp_0))
+   (where (dim_1 shp_r0) (split-left-dim shp_1))
+   (equate/n env_0 archive_0 dim_0 dim_1 env_1 archive_1)
+   (equate/n env_1 archive_1 shp_l0 shp_r0 env_2 archive_2)
+   --- equate:trimL/dim
+   (equate/n env_0 archive_0 shp_0 shp_1 env_2 archive_2)]
+  [(where (shp_l0 dim_0) (split-right-dim shp_0))
+   (where (shp_r0 dim_1) (split-right-dim shp_1))
+   (equate/n env_0 archive_0 dim_0 dim_1 env_1 archive_1)
+   (equate/n env_1 archive_1 shp_l0 shp_r0 env_2 archive_2)
+   --- equate:trimR/dim
+   (equate/n env_0 archive_0 shp_0 shp_1 env_2 archive_2)]
+  ;; Can we peel svars off the ends?
+  [(equate/n env_0 archive_0 {++ shp_0 ...} {++ shp_1 ...} env_2 archive_2)
+   --- equate:trimL/svar
+   (equate/n env_0 archive_0
+             {++ svar shp_0 ...}
+             {++ svar shp_1 ...}
+             env_2 archive_2)]
+  [(equate/n env_0 archive_0 {++ shp_0 ...} {++ shp_1 ...} env_2 archive_2)
+   --- equate:trimR/svar
+   (equate/n env_0 archive_0
+             {++ shp_0 ... svar}
+             {++ shp_1 ... svar}
+             env_2 archive_2)]
   ;; Ask an ILP solver whether dim_0 and dim_1 can be equated and what values
   ;; must be assigned to their unsolved existential variables in order to do so.
-  [(where (_ ... (env_1 archive_1) _ ...)
+  [(side-condition
+    ;; Make sure the shapes we have don't match some shortcut rule before we
+    ;; hand them off to the Makanin solver.
+    ,(nor
+      ;; trivial case
+      (redex-match? Remora-elab [shp shp] (term [shp_0 shp_1]))
+      ;; directly solvable cases
+      (term (resolvable-shp? env_0 shp_0 shp_1))
+      (term (resolvable-shp? env_0 shp_1 shp_0))
+      ;; dimension peel cases
+      (and (redex-match? Remora-elab (dim shp) (term (split-left-dim shp_0)))
+           (redex-match? Remora-elab (dim shp) (term (split-left-dim shp_1))))
+      (and (redex-match? Remora-elab (shp dim) (term (split-right-dim shp_0)))
+           (redex-match? Remora-elab (shp dim) (term (split-right-dim shp_1))))
+      ;; svar peel cases
+      (and (redex-match? Remora-elab {++ svar _ ...} (term shp_0))
+           (redex-match? Remora-elab {++ svar _ ...} (term shp_1)))
+      (and (redex-match? Remora-elab {++ _ ... svar} (term shp_0))
+           (redex-match? Remora-elab {++ _ ... svar} (term shp_1)))))
+   (where (_ ... (env_1 archive_1) _ ...)
      (equate-shapes env_0 archive_0
                     (apply-env/e:idx env_0 shp_0)
                     (apply-env/e:idx env_0 shp_1)))
    --- equate:shp
-   (equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)]
-  [--- equate:dim
-   (equate env archive dim dim env archive)])
+   (equate/n env_0 archive_0 shp_0 shp_1 env_1 archive_1)]
+  ;; For a singleton shape, the solver has no tricky decisions to make.
+  [(where (_ ... (env_1 archive_1) _ ...)
+     (equate-shapes env_0 archive_0
+                    (apply-env/e:idx env_0 {Shp dim_0})
+                    (apply-env/e:idx env_0 {Shp dim_1})))
+   --- equate:dim
+   (equate/n env_0 archive_0 dim_0 dim_1 env_1 archive_1)])
 ;;; Metafunction wrapper for solver call
 (define-metafunction Remora-elab
   equate-shapes : env archive shp shp -> [(env archive) ...]
   [(equate-shapes env archive shp_0 shp_1)
-   ,(stream->list (solutions (term env) (term archive)
-                             (term shp_0) (term shp_1)))])
+   ,(begin
+      ;(printf "Initial environment:\n~v\n" (term env))
+      ;(printf "Initial archive:\n~v\n" (term archive))
+      ;(printf "Left shape:\n~v\n" (term shp_0))
+      ;(printf "Right shape:\n~v\n" (term shp_1))
+      (stream->list (solutions (term env) (term archive)
+                               (term shp_0) (term shp_1))))])
+
+;; Is the first shape an existential variable that can be resolved as the
+;; second shape in the given environment?
+(define-metafunction Remora-elab
+  resolvable-shp? : env shp shp -> boolean
+  [(resolvable-shp? [env-entry_l ... exsvar env-entry_r ...] exsvar shp)
+   ,(judgment-holds (sort-shp [env-entry_l ...] shp))]
+  [(resolvable-shp? _ _ _) #f])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Helper judgments for typing lists of terms all at the same type
