@@ -55,9 +55,7 @@
   (and (for/and ([c dim-eqv-reln]) (set? c))
        ;; At this point, we know the equivalence relation only relates dims with
        ;; dims and universal shape variables with themselves.
-       (let* (;; TODO: How to handle partially constrained existential svars?
-              ;[sym->idx-list (translate-soln sym->id-list id->idx id-eqv-reln)]
-              [sym->idx-list (elaborate-svars sym->id-list id->idx)]
+       (let* ([sym->idx-list (elaborate-svars sym->id-list id->idx)]
               [env/elaborated (elaborate-exsvar-entries env sym->idx-list)]
               [dim-eqv-reln/fresh-dvars
                (for/fold ([eqv dim-eqv-reln])
@@ -80,6 +78,7 @@
 ;;; [Hash SVar [Listof Nat]] [Hash Nat [Dim U Svar]]
 ;;; -> [Listof Shp]
 (define (elaborate-svars sym->id-list id->idx)
+  #;(printf "Elaborating solution:\n~v\n~v\n\n" sym->id-list id->idx)
   (for/hash
    ([(svar _) sym->id-list])
    (values
@@ -87,12 +86,16 @@
     (for/list
      ([component-id (hash-ref sym->id-list svar '())]
       [i (in-naturals)])
-     (if (svar? (hash-ref id->idx component-id))
-         (hash-ref id->idx component-id)
-         `(Shp (^ ,(string->symbol (format
-                                    "$~a~a"
-                                    (substring
-                                     (symbol->string svar) 1) i)))))))))
+     ;; TODO: What if this component is unconstrained so the hash contains #f?
+     ;; For now, treating any unconstrained position as a 0 dimension.
+     (cond [(not component-id) '{Shp 0}]
+           [(svar? (hash-ref id->idx component-id))
+            (hash-ref id->idx component-id)]
+           [else
+            `(Shp (^ ,(string->symbol (format
+                                       "$~a~a"
+                                       (substring
+                                        (symbol->string svar) 1) i))))])))))
 
 ;;; For each svar in the given solution hash, elaborate piece of the environment
 ;;; to include entries for the newly-generated ^dvar components.
@@ -162,6 +165,10 @@
   ;; equivalence relation on syntactically encoded dims, and translate the
   ;; assignment so that its codomain is syntactic dims instead of ID numbers.
   ;; TODO: Consistency check for updated archive
+  ;;  - Make sure (mixed-prefix?) ILP for dims in archive is SAT
+  ;;    - Disallow exvar depending on later univar
+  ;;    - Need to be able to build a concrete solution for exvars
+  ;;  - If ILP is UNIQUE-SAT, propagate the sole solution?
   (define translated-solns
     (for/stream ([s solns])
                 (define sym->id-list (first s))
