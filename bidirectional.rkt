@@ -524,19 +524,6 @@
       [(λ ((c (Array atmtype_hi shp_c)))
          (array {} [(iλ [ivar ...] c)]))])
      e:ectx))]
-  ;; After destructuring the atom type as much as possible, we can conclude that
-  ;; [T_1 S_1] <: [T_2 S_2] by making sure T_1 <: T_2 and S_1 ≐ S_2. The
-  ;; resulting coercion will be ugly. It must apply an η-expanded version of the
-  ;; atom coercion (but there doesn't seem to be much that can be done with atom
-  ;; coercions because atom-level computation is so restricted).
-  [(subtype/atom env_0 archive_0 atmtype_0 atmtype_1 env_1 archive_1 e:actx)
-   (equate env_1 archive_1 shp_0 shp_1 env_2 archive_2)
-   --- sub:Array
-   (subtype/expr env_0 archive_0
-                 (Array atmtype_0 shp_0)
-                 (Array atmtype_1 shp_1)
-                 env_2 archive_2
-                 (lift-atom-coercion e:actx))]
   ;; Here we have something regular but need to put it in the form used by
   ;; irregular data.
   [(where var_sm ,(gensym 'SM_))
@@ -557,7 +544,91 @@
                        (subst* (Array atmtype_hi shp_c) [(ivar (^ ivar)) ...])
                        (array []
                               {(box (^ ivar) ... hole
-                                    (Σ [(ivar->bind ivar) ...] (Array atmtype_hi shp_c)))}))))])
+                                    (Σ [(ivar->bind ivar) ...] (Array atmtype_hi shp_c)))}))))]
+  [(where [(atmvar_in svar_in) ...]
+     ,(build-list
+       (length (term [arrtype_in ...]))
+       (λ (n) (list
+               (gensym (format "&~a-in~a-"
+                               (substring (symbol->string (term atmvar)) 1)
+                               n))
+               (gensym (format "@~a-in~a-"
+                               (substring (symbol->string (term atmvar)) 1)
+                               n))))))
+   (where atmvar_out
+     ,(gensym (format "&~a-out"
+                      (substring (symbol->string (term atmvar)) 1))))
+   (where svar_out
+     ,(gensym (format "@~a-out"
+                      (substring (symbol->string (term atmvar)) 1))))
+   (subtype/expr [env-entry_l ...
+                  (^ atmvar_in) ... (^ svar_in) ... (^ atmvar_out) (^ svar_out)
+                  (^ atmvar (-> [(Array (^ atmvar_in) (^ svar_in)) ...]
+                                (Array (^ atmvar_out) (^ svar_out))))
+                  env-entry_r ...]
+                 archive_0
+                 (Array (-> [(Array (^ atmvar_in) (^ svar_in)) ...]
+                            (Array (^ atmvar_out) (^ svar_out)))
+                        shp_lo)
+                 (Array (-> [arrtype_in ...] arrtype_out) shp_hi)
+                 env_1 archive_1
+                 e:ectx)
+   --- sub:->instL
+   (subtype/expr [env-entry_l ... (^ atmvar) env-entry_r ...]
+                 archive_0
+                 (Array (^ atmvar) shp_lo)
+                 (Array (-> [arrtype_in ...] arrtype_out) shp_hi)
+                 env_1 archive_1 e:ectx)]
+  [(where [(atmvar_in svar_in) ...]
+     ,(build-list
+       (length (term [arrtype_in ...]))
+       (λ (n) (list
+               (gensym (format "&~a-in~a-"
+                               (substring (symbol->string (term atmvar)) 1)
+                               n))
+               (gensym (format "@~a-in~a-"
+                               (substring (symbol->string (term atmvar)) 1)
+                               n))))))
+   (where atmvar_out
+     ,(gensym (format "&~a-out"
+                      (substring (symbol->string (term atmvar)) 1))))
+   (where svar_out
+     ,(gensym (format "@~a-out"
+                      (substring (symbol->string (term atmvar)) 1))))
+   (subtype/expr [env-entry_l ...
+                  (^ atmvar_in) ... (^ svar_in) ... (^ atmvar_out) (^ svar_out)
+                  (^ atmvar (-> [(Array (^ atmvar_in) (^ svar_in)) ...]
+                                (Array (^ atmvar_out) (^ svar_out))))
+                  env-entry_r ...]
+                 archive_0
+                 (Array (-> [arrtype_in ...] arrtype_out) shp_hi)
+                 (Array (-> [(Array (^ atmvar_in) (^ svar_in)) ...]
+                            (Array (^ atmvar_out) (^ svar_out)))
+                        shp_lo)
+                 env_1 archive_1
+                 e:ectx)
+   --- sub:->instR
+   (subtype/expr [env-entry_l ... (^ atmvar) env-entry_r ...]
+                 archive_0
+                 (Array (-> [arrtype_in ...] arrtype_out) shp_hi)
+                 (Array (^ atmvar) shp_lo)
+                 env_1 archive_1 e:ectx)]
+  ;; After destructuring the atom type as much as possible, we can conclude that
+  ;; [T_1 S_1] <: [T_2 S_2] by making sure T_1 <: T_2 and S_1 ≐ S_2. The
+  ;; resulting coercion will be ugly. It must apply an η-expanded version of the
+  ;; atom coercion (but there doesn't seem to be much that can be done with atom
+  ;; coercions because atom-level computation is so restricted).
+  [(subtype/atom env_0 archive_0
+                 (apply-env/type env_0 atmtype_0)
+                 (apply-env/type env_0 atmtype_1)
+                 env_1 archive_1 e:actx)
+   (equate env_1 archive_1 shp_0 shp_1 env_2 archive_2)
+   --- sub:Array
+   (subtype/expr env_0 archive_0
+                 (Array atmtype_0 shp_0)
+                 (Array atmtype_1 shp_1)
+                 env_2 archive_2
+                 (lift-atom-coercion e:actx))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Subtype instantiation judgments
@@ -577,8 +648,8 @@
   [(kind-atm (env-entry_l ...) monotype)
    --- AtmL:solve
    (instL/atom (env-entry_l ... (^ tvar) env-entry_r ...) archive
-             (^ tvar) monotype
-             (env-entry_l ... (^ tvar monotype) env-entry_r ...) archive hole)]
+               (^ tvar) monotype
+               (env-entry_l ... (^ tvar monotype) env-entry_r ...) archive hole)]
   ;; If we've already instantiated this type var, make sure the old solution is
   ;; compatible with the goal type.
   [(subtype/atom [env-entry_l0 ...] archive_0
@@ -586,9 +657,9 @@
                  [env-entry_l0 ...] archive_1 e:actx)
    --- AtmL:solved
    (instL/atom [env-entry_l0 ... (^ tvar atmtype) env-entry_r ...] archive_0
-             (^ tvar) monotype
-             [env-entry_l0 ... (^ tvar atmtype) env-entry_r ...]
-             archive_1 e:actx)]
+               (^ tvar) monotype
+               [env-entry_l0 ... (^ tvar atmtype) env-entry_r ...]
+               archive_1 e:actx)]
   ;; If the goal is an exvar bound later, solve that exvar instead.
   [--- AtmL:reach
    (instL/atom
