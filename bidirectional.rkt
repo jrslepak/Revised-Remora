@@ -35,7 +35,9 @@
    --- syn:λ
    (synth/atom [env-entry_0 ...] archive_0
                (λ [(var spec) ...] expr)
-               (-> [arrtype_generated ...] arrtype_out)
+               (Inormalize-type
+                (apply-env/type
+                 env_1 (-> [arrtype_generated ...] arrtype_out)))
                [env-entry_1 ...] archive_1
                (apply-env/e:atom
                 env_1
@@ -132,14 +134,14 @@
                   env_1 archive_1 [e:ectx_in ...])
    (check/expr env_1 archive_1
                expr arrtype_out
-               env_2 archive_2 e:expr)
-   (where [env-entry_2 ... (?i var_sm) _ ...] env_2)
+               [env-entry_2 ... (?i var_sm) env-entry_3 ...]
+               archive_2 e:expr)
    --- chk:λ
    (check/atom [env-entry_0 ...] archive_0
                (λ [(var spec) ...] expr)
                (-> [arrtype_in ...] arrtype_out)
                [env-entry_2 ...] archive_2
-               (apply-env/e:atom env_2
+               (apply-env/e:atom [env-entry_2 ... (?i var_sm) env-entry_3 ...]
                 (λ [(var (elab-type arrtype_generated)) ...]
                   (subst* e:expr [(var (in-hole e:ectx_in var)) ...]))))]
   [(side-condition
@@ -273,8 +275,9 @@
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
   [(synth-app [env-entry_0 ... (^ tvar) ...] archive_0
-              e:expr_fp (subst* (Array atmtype_fun {++ shp_all shp_fun})
-                                [(tvar (^ tvar)) ...])
+              (t-app e:expr_fp (^ tvar) ...)
+              (subst* (Array atmtype_fun {++ shp_all shp_fun})
+                      [(tvar (^ tvar)) ...])
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
@@ -285,11 +288,12 @@
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
-              (apply-env/e:expr env_1 (t-app e:expr_fm (^ tvar) ...))
+              (apply-env/e:expr env_1 e:expr_fm)
               [e:expr_arg ...])]
   [(synth-app [env-entry_0 ... (^ ivar) ...] archive_0
-              e:expr_fp (subst* (Array atmtype_fun {++ shp_all shp_fun})
-                                [(ivar (^ ivar)) ...])
+              (i-app e:expr_fp (^ ivar) ...)
+              (subst* (Array atmtype_fun {++ shp_all shp_fun})
+                      [(ivar (^ ivar)) ...])
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
@@ -300,7 +304,7 @@
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
-              (apply-env/e:expr env_1 (i-app e:expr_fm (^ ivar) ...))
+              (apply-env/e:expr env_1 e:expr_fm)
               [e:expr_arg ...])]
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
@@ -320,7 +324,9 @@
    ;; we might use either app:->*f or app:->*a. Prune off this version in that
    ;; case, to reduce redundant derivation search.
    (side-condition
-    ,(not (redex-match? Remora-elab [_ ... (^ svar_aext {Shp}) _ ...] (term env_2))))
+    ,(not (redex-match? Remora-elab {Shp}
+                        (term (Inormalize-idx (apply-env/e:idx
+                                               env_2 (^ svar_aext)))))))
    ;; Imagine we have a curried function. After consuming only this first
    ;; argument, what shape does the function array have? That is the "frame
    ;; shape so far" at this point in processing the whole n-ary application.

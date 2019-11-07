@@ -9,7 +9,7 @@
          Remora-elab
          monotype?
          scl Scl
-         Inormalize-idx
+         Inormalize-idx Inormalize-type
          elab-type
          ivar->bind tvar->bind
          dim-tag shp-tag atm-tag
@@ -80,7 +80,6 @@
 
 (define-metafunction Remora-elab
   Inormalize-idx : idx -> nidx
-  [(Inormalize-idx nidx) nidx]
   [(Inormalize-idx {Shp dim ...})
    {Shp (Inormalize-idx dim) ...}]
   [(Inormalize-idx {+ dim_0 ... {+ dim_1 ...} dim_2 ...})
@@ -104,7 +103,22 @@
    (Inormalize-idx {++ shp_0 ... {Shp dim_0 ... dim_1 ...} shp_1 ...})]
   [(Inormalize-idx {++ nshp}) nshp]
   [(Inormalize-idx {++}) {Shp}]
-  [(Inormalize-idx {++ dim ...}) {++ dim ...}])
+  [(Inormalize-idx {++ dim ...}) {++ dim ...}]
+  [(Inormalize-idx nidx) nidx])
+
+;;; Normalize indices appearing in a type
+(define-metafunction Remora-elab
+  Inormalize-type : type -> type
+  [(Inormalize-type var) var]
+  [(Inormalize-type (^ var)) (^ var)]
+  [(Inormalize-type (Array type shp)) (Array (Inormalize-type type)
+                                             (Inormalize-idx shp))]
+  [(Inormalize-type base-type) base-type]
+  [(Inormalize-type (-> [type_in ...] type_out))
+   (-> [(Inormalize-type type_in) ...] (Inormalize-type type_out))]
+  [(Inormalize-type (∀ [var ...] type)) (∀ [var ...] (Inormalize-type type))]
+  [(Inormalize-type (Π [var ...] type)) (Π [var ...] (Inormalize-type type))]
+  [(Inormalize-type (Σ [var ...] type)) (Σ [var ...] (Inormalize-type type))])
 
 (define-metafunction Remora-elab
   split-left-dim : nshp -> (ndim nshp) or #f
