@@ -436,6 +436,24 @@
   ;; TODO: sub:ΣL, sub:ΣR
   #:mode (subtype/expr I I I I O O O)
   #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
+  [;; TODO: occurs check
+   (side-condition
+    ,(not (redex-match?
+           Remora-elab
+           [(^ arrvar) (^ arrvar)]
+           (term [exatmvar atmtype]))))
+   (instL/array env_0 archive_0 exarrvar arrtype env_1 archive_1 e:ectx)
+   --- sub:instL/array
+   (subtype/expr env_0 archive_0 exarrvar arrtype env_1 archive_1 e:ectx)]
+  [;; TODO: occurs check
+   (side-condition
+    ,(not (redex-match?
+           Remora-elab
+           [(^ arrvar) (^ arrvar)]
+           (term [exatmvar atmtype]))))
+   (instR/array env_0 archive_0 arrtype exarrvar env_1 archive_1 e:ectx)
+   --- sub:instR/array
+   (subtype/expr env_0 archive_0 arrtype exarrvar env_1 archive_1 e:ectx)]
   ;; TODO: Should these three (base/atmvar/arrvar) be subsumed by a refl rule?
   [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
    --- sub:base
@@ -462,7 +480,7 @@
    (subtype/expr env_2 archive_2
                  arrtype_outl arrtype_outh
                  env_3 archive_3 e:ectx_out)
-   --- sub:->
+   --- sub:->*
    (subtype/expr env_0 archive_0
                  (Array (-> [arrtype_inl ...] arrtype_outl) shp_fl)
                  (Array (-> [arrtype_inh ...] arrtype_outh) shp_fh)
@@ -867,7 +885,7 @@
   [(kind-array [env-entry_l ...] monotype)
    --- ArrR:solve
    (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive
-                (^ tvar) monotype
+                monotype (^ tvar)
                 [env-entry_l ... (^ tvar monotype) env-entry_r ...]
                 archive hole)]
   [(subtype/expr [env-entry_l0 ...] archive_0

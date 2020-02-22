@@ -13,7 +13,7 @@
          Inormalize-idx Inormalize-type
          elab-type
          ivar->bind tvar->bind
-         dim-tag shp-tag atm-tag
+         dim-tag shp-tag atm-tag arr-tag
          sort-tag kind-tag
          apply-env/e:expr apply-env/e:ectx
          apply-env/e:atom apply-env/e:actx
@@ -194,6 +194,10 @@
   atm-tag : var -> atmvar
   [(atm-tag var)
    ,(string->symbol (string-append "&" (symbol->string (term var))))])
+(define-metafunction Remora-elab
+  arr-tag : var -> arrvar
+  [(arr-tag var)
+   ,(string->symbol (string-append "*" (symbol->string (term var))))])
 
 ;;; Utilities for converting variable-class notation into kind/sort-tag notation
 (define-metafunction Remora-elab
@@ -426,9 +430,8 @@
   arg-env-entries : (var spec) -> [(^ var) ... (var arrtype)]
   [(arg-env-entries (var arrtype)) [(var arrtype)]]
   [(arg-env-entries (var all))
-   [(^ atmvar) (^ svar) (var (Array (^ atmvar) (^ svar)))]
-   (where svar (shp-tag var))
-   (where atmvar (atm-tag var))]
+   [(^ arrvar) (var (^ arrvar))]
+   (where arrvar (arr-tag var))]
   [(arg-env-entries (var natural))
    [(^ atmvar) (^ dvar) ... (var (Array (^ atmvar) {Shp (^ dvar) ...}))]
    (where [dvar ...]
