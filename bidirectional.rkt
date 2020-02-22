@@ -53,13 +53,18 @@
                [env-entry_1 ...] archive_1
                e:expr_s)
    ;; The unbox arity tells how many Σ-bound ivars to demand
-   (side-condition ,(= (length (term (ivar ...)) (term (ivar_s ...)))))
-   (synth/expr [env-entry_1 ...
+   (side-condition ,(= (length (term (ivar ...))) (length (term (ivar_s ...)))))
+   ;; Using partially-specified check should be more permissive than synth
+   (where atmvar_b ,(gensym '&ub))
+   (where svar_b ,(gensym '@ub))
+   (where [atmtype_b shp_b] [(^ atmvar_b) (^ svar_b)])
+   (check/expr [env-entry_1 ...
+                (^ atmvar_b) (^ svar_b)
                 ivar ...
                 (evar (subst* arrtype_s [(ivar_s ivar) ...]))]
                archive_1
                expr_b
-               arrtype_b
+               (Array atmtype_b shp_b)
                [env-entry_n ...
                 ivar ... (evar _)
                 _ ...]
@@ -69,7 +74,7 @@
    (synth/expr [env-entry_0 ...]
                archive_0
                (unbox (ivar ... evar expr_s) expr_b)
-               arrtype_b
+               (Array atmtype_b {++ shp_f shp_b})
                [env-entry_n ...]
                archive_2
                (unbox (ivar ... evar e:expr_s) e:expr_b))]
