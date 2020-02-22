@@ -32,8 +32,8 @@
   (AE atom expr)
   (spec rank type)
   (rank natural all)
-  (op + - * and or not > < =
-      length shape reduce iota reshape)
+  (op %+ %- %* %and %or %not %> %< %=
+      %length %shape %reduce %iota %reshape)
   ;; Type level
   (atmtype atmvar
            base-type
@@ -125,39 +125,39 @@
 
 (define-metafunction Remora-implicit
   op->Itype : op -> type
-  [(op->Itype +) (-> [(IScl Int) (IScl Int)] (IScl Int))]
-  [(op->Itype -) (-> [(IScl Int) (IScl Int)] (IScl Int))]
-  [(op->Itype *) (-> [(IScl Int) (IScl Int)] (IScl Int))]
-  [(op->Itype and) (-> [(IScl Bool) (IScl Bool)] (IScl Bool))]
-  [(op->Itype or) (-> [(IScl Bool) (IScl Bool)] (IScl Bool))]
-  [(op->Itype not) (-> [(IScl Bool)] (IScl Bool))]
-  [(op->Itype <) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
-  [(op->Itype =) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
-  [(op->Itype >) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
-  [(op->Itype length) (∀ [&t]
-                        (IScl
-                         (Π [$l @s]
-                           (IScl
-                            (-> [(Array &t {++ {Shp $l} @s})] (IScl Int))))))]
-  [(op->Itype shape) (∀ [&t]
-                       (IScl
-                        (Π [@s]
-                          (IScl
-                           (-> [(Array &t @s)]
-                               (IScl (Σ [$r] (Array Int {Shp $r}))))))))]
-  [(op->Itype reduce) (∀ [&t]
-                        (IScl
-                         (I&Π [$l @f @c]
-                              (I&-> [(I&-> [(Array &t @c) (Array &t @c)]
-                                           (Array &t @c))
-                                     (Array &t {++ @f @c})
-                                     (Array &t {++ {Shp $l} @f @c})]
-                                    (Array &t {++ @f @c})))))]
-  [(op->Itype iota) (Π [$r]
-                      (IScl (-> [(Array Int {Shp $r})]
-                               (IScl (Σ [@s] (Array Int @s))))))]
-  [(op->Itype reshape) (∀ [&t]
+  [(op->Itype %+) (-> [(IScl Int) (IScl Int)] (IScl Int))]
+  [(op->Itype %-) (-> [(IScl Int) (IScl Int)] (IScl Int))]
+  [(op->Itype %*) (-> [(IScl Int) (IScl Int)] (IScl Int))]
+  [(op->Itype %and) (-> [(IScl Bool) (IScl Bool)] (IScl Bool))]
+  [(op->Itype %or) (-> [(IScl Bool) (IScl Bool)] (IScl Bool))]
+  [(op->Itype %not) (-> [(IScl Bool)] (IScl Bool))]
+  [(op->Itype %<) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
+  [(op->Itype %=) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
+  [(op->Itype %>) (-> [(IScl Int) (IScl Int)] (IScl Bool))]
+  [(op->Itype %length) (∀ [&t]
                          (IScl
-                          (I&Π [$r @old]
-                               (I&-> [(Array Int {Shp $r}) (Array &t @old)]
+                          (Π [$l @s]
+                            (IScl
+                             (-> [(Array &t {++ {Shp $l} @s})] (IScl Int))))))]
+  [(op->Itype %shape) (∀ [&t]
+                        (IScl
+                         (Π [@s]
+                           (IScl
+                            (-> [(Array &t @s)]
+                                (IScl (Σ [$r] (Array Int {Shp $r}))))))))]
+  [(op->Itype %reduce) (∀ [&t]
+                         (IScl
+                          (I&Π [$l @f @c]
+                               (I&-> [(I&-> [(Array &t @c) (Array &t @c)]
+                                            (Array &t @c))
+                                      (Array &t {++ @f @c})
+                                      (Array &t {++ {Shp $l} @f @c})]
+                                     (Array &t {++ @f @c})))))]
+  [(op->Itype %iota) (Π [$r]
+                       (IScl (-> [(Array Int {Shp $r})]
+                                 (IScl (Σ [@s] (Array Int @s))))))]
+  [(op->Itype %reshape) (∀ [&t]
+                          (IScl
+                           (I&Π [$r @old]
+                                (I&-> [(Array Int {Shp $r}) (Array &t @old)]
                                       (I&Σ [@new] (Array &t @new))))))])

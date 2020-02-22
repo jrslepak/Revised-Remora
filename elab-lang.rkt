@@ -6,6 +6,7 @@
 
 (provide Remora-explicit*
          Remora-implicit*
+         op->Itype
          Remora-elab
          monotype?
          scl Scl
