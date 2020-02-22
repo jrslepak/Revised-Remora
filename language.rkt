@@ -2,13 +2,15 @@
 
 (require redex)
 (provide Remora-explicit
-         #;Scl #;scl &-> &Π &Σ &∀ &
+         Scl scl &-> &Π &Σ &∀ &
          op->type)
 
 ;;; TODO: Specialized forms of polymorphic primops should be treated as primops.
 
 (define-language Remora-explicit
-  (var variable-not-otherwise-mentioned)
+  (var + - * and or not > < =
+      length shape reduce iota reshape
+      variable-not-otherwise-mentioned)
   ;; Term-level pieces
   ;; The old atom/scalar distinction is now simplified. Old notation for a bare
   ;; atom now indicates a scalar, without having to wrap it in a degenerate
@@ -54,8 +56,8 @@
         (unbox (var ... var expr) ectx))
   ;; Add more primops as they are needed.
   ;; TODO: how to handle curried primops?
-  (op + - * and or not > < =
-      length shape reduce iota reshape)
+  (op %+ %- %* %and %or %not %> %< %=
+      %length %shape %reduce %iota %reshape)
   (val var
        (array {natural ...}
               (atom ...))
@@ -164,37 +166,37 @@
 ;;; Look up the type of a primitive operator
 (define-metafunction Remora-explicit
   op->type : op -> type
-  [(op->type +) (-> [(Scl Int) (Scl Int)] (Scl Int))]
-  [(op->type -) (-> [(Scl Int) (Scl Int)] (Scl Int))]
-  [(op->type *) (-> [(Scl Int) (Scl Int)] (Scl Int))]
-  [(op->type and) (-> [(Scl Bool) (Scl Bool)] (Scl Bool))]
-  [(op->type or) (-> [(Scl Bool) (Scl Bool)] (Scl Bool))]
-  [(op->type not) (-> [(Scl Bool)] (Scl Bool))]
-  [(op->type <) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
-  [(op->type =) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
-  [(op->type >) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
-  [(op->type length) (∀ [(t Atom)]
+  [(op->type %+) (-> [(Scl Int) (Scl Int)] (Scl Int))]
+  [(op->type %-) (-> [(Scl Int) (Scl Int)] (Scl Int))]
+  [(op->type %*) (-> [(Scl Int) (Scl Int)] (Scl Int))]
+  [(op->type %and) (-> [(Scl Bool) (Scl Bool)] (Scl Bool))]
+  [(op->type %or) (-> [(Scl Bool) (Scl Bool)] (Scl Bool))]
+  [(op->type %not) (-> [(Scl Bool)] (Scl Bool))]
+  [(op->type %<) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
+  [(op->type %=) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
+  [(op->type %>) (-> [(Scl Int) (Scl Int)] (Scl Bool))]
+  [(op->type %length) (∀ [(t Atom)]
                         (Scl
                          (Π [(l Dim) (s Shape)]
-                            (Scl
-                             (-> [(Array t {++ {Shp l} s})] (Scl Int))))))]
-  [(op->type shape) (∀ [(t Atom)]
+                           (Scl
+                            (-> [(Array t {++ {Shp l} s})] (Scl Int))))))]
+  [(op->type %shape) (∀ [(t Atom)]
                        (Scl
                         (Π [(s Shape)]
-                           (Scl
-                            (-> [(Array t s)]
-                                (Scl (Σ [(r Dim)] (Array Int {Shp r}))))))))]
-  [(op->type reduce) (∀ [(t Atom)]
-                         (&Π [(l Dim) (f Shape) (c Shape)]
-                             (&-> [(&-> [(Array t c) (Array t c)] (Array t c))
-                                   (Array t {++ f c})
-                                   (Array t {++ {Shp l} f c})]
-                                  (Array t {++ f c}))))]
-  [(op->type iota) (Π [(r Dim)]
+                          (Scl
+                           (-> [(Array t s)]
+                               (Scl (Σ [(r Dim)] (Array Int {Shp r}))))))))]
+  [(op->type %reduce) (∀ [(t Atom)]
+                        (&Π [(l Dim) (f Shape) (c Shape)]
+                            (&-> [(&-> [(Array t c) (Array t c)] (Array t c))
+                                  (Array t {++ f c})
+                                  (Array t {++ {Shp l} f c})]
+                                 (Array t {++ f c}))))]
+  [(op->type %iota) (Π [(r Dim)]
                       (Scl (-> [(Array Int {Shp r})]
-                                  (Scl (Σ [(s Shape)] (Array Int s))))))]
-  [(op->type reshape) (&∀ [(t Atom)]
-                          (&Π [(r Dim) (old Shape)]
-                              (&-> [(Int {Shp r}) (Array t old)]
-                                   (&Σ [(new Shape)] (Array t new)))))])
+                               (Scl (Σ [(s Shape)] (Array Int s))))))]
+  [(op->type %reshape) (&∀ [(t Atom)]
+                           (&Π [(r Dim) (old Shape)]
+                               (&-> [(Int {Shp r}) (Array t old)]
+                                    (&Σ [(new Shape)] (Array t new)))))])
 

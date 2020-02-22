@@ -391,13 +391,13 @@
   (check-alpha-equivalent?
    (judgment-holds
     (type-of/expr [] [] []
-                  (i-app (array {} [iota]) 5)
+                  (i-app (array {} [%iota]) 5)
                   type expr:t)
     (type expr:t))
    (list (term ((Array (-> [(Array Int {Shp 5})]
                            (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
                        {Shp})
-                (i-app (array {} [iota]
+                (i-app (array {} [%iota]
                               : (Array (Π [(r Dim)]
                                           (Array (-> [(Array Int {Shp r})]
                                                      (Array (Σ [(s Shape)]
@@ -414,13 +414,13 @@
   (check-alpha-equivalent?
    (judgment-holds
     (type-of/expr [] [] []
-                  (i-app (array {3} [iota iota iota]) 5)
+                  (i-app (array {3} [%iota %iota %iota]) 5)
                   type expr:t)
     (type expr:t))
    (list (term ((Array (-> [(Array Int {Shp 5})]
                            (Array (Σ [(s Shape)] (Array Int s)) {Shp}))
                        {Shp 3})
-                (i-app (array {3} [iota iota iota]
+                (i-app (array {3} [%iota %iota %iota]
                               : (Array (Π [(r Dim)]
                                           (Array (-> [(Array Int {Shp r})]
                                                      (Array (Σ [(s Shape)]
@@ -437,12 +437,12 @@
   (check-alpha-equivalent?
    (judgment-holds
     (type-of/expr [] [] []
-                  ((i-app (array {3} [iota iota iota]) 2)
+                  ((i-app (array {3} [%iota %iota %iota]) 2)
                    (array {3 2} [1 2 3 4 5 6]))
                   type expr:t)
     (type expr:t))
    (list (term ((Array (Σ [(s Shape)] (Array Int s)) {Shp 3})
-                ((i-app (array {3} [iota iota iota]
+                ((i-app (array {3} [%iota %iota %iota]
                                : (Array (Π [(r Dim)]
                                            (Array (-> [(Array Int {Shp r})]
                                                       (Array (Σ [(s Shape)]
@@ -474,16 +474,16 @@
   (check-alpha-equivalent?
    (judgment-holds
     (type-of/expr [] [] []
-                  ((array {2} [+ *])
+                  ((array {2} [%+ %*])
                    (array {2 3} [2 3 4 5 6 7])
                    (array {} [10]))
                   type expr:t)
     (type expr:t))
    (list (term ((Array Int {Shp 2 3})
-                ((array {2} [+ *] : (Array (-> [(Array Int {Shp})
-                                               (Array Int {Shp})]
-                                              (Array Int {Shp}))
-                                          {Shp 2}))
+                ((array {2} [%+ %*] : (Array (-> [(Array Int {Shp})
+                                                  (Array Int {Shp})]
+                                                 (Array Int {Shp}))
+                                             {Shp 2}))
                  (array {2 3} [2 3 4 5 6 7] : (Array Int {Shp 2 3}))
                  (array {} [10] : (Array Int {Shp}))
                  : (Array Int {Shp 2 3}))))))
@@ -491,15 +491,15 @@
   (check-alpha-equivalent?
    (judgment-holds
     (type-of/expr [] [] []
-                  (unbox (sh tensor ((i-app (array {} [iota]) 3)
+                  (unbox (sh tensor ((i-app (array {} [%iota]) 3)
                                    (array {3} [2 4 5])))
-                    ((i-app (t-app (array {} [shape]) Int) sh) tensor))
+                    ((i-app (t-app (array {} [%shape]) Int) sh) tensor))
                   type expr:t)
     (type expr:t))
    (list (term ((Array (Σ [(rank Dim)] (Array Int {Shp rank})) {Shp})
                 (unbox (sh
                         tensor
-                        ((i-app (array {} [iota]
+                        ((i-app (array {} [%iota]
                                        : (Array
                                           (Π [(r Dim)]
                                              (Array
@@ -525,7 +525,7 @@
                             {Shp})))
                   ((i-app
                     (t-app
-                     (array {} [shape]
+                     (array {} [%shape]
                             : (Array
                                (∀ [(t Atom)]
                                   (Array
@@ -562,7 +562,7 @@
   (check-false
    (judgment-holds
     (type-of/expr [] [] []
-                  (unbox (sh tensor ((i-app (array {} [iota]) 3)
+                  (unbox (sh tensor ((i-app (array {} [%iota]) 3)
                                    (array {3} [2 4 5])))
                     tensor)
                   type expr:t))))

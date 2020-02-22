@@ -154,7 +154,7 @@
     ((array {2} [(λ (x) x) (λ (x) x)])
      ((array {2 3} [1 2 3 4 5 6]) :: {Shp 3})
      : {Shp 2 3}))
-   (term (frame {Shp 2 3}
+   (term (frame {Shp 2}
                 [((scl:e (λ (x) x))
                   ((array {3} [1 2 3]) :: {Shp 3})
                   : {Shp 3})
@@ -163,13 +163,13 @@
                   : {Shp 3})])))
   ;; Test for β step
   (check-step
-   (term ((scl:e (λ (xs) ((scl:e +)
+   (term ((scl:e (λ (xs) ((scl:e %+)
                           ((scl:e 1) :: {Shp})
                           (xs :: {Shp})
                           : {Shp 4})))
           ((array {4} [2 3 5 7]) :: {Shp 4})
           : {Shp 4}))
-   (term ((scl:e +)
+   (term ((scl:e %+)
           ((scl:e 1) :: {Shp})
           ((array {4} [2 3 5 7]) :: {Shp})
           : {Shp 4})))
@@ -180,7 +180,7 @@
            (Iλ (shp len)
              (scl:e
               (λ ()
-                (i-app (array {} [iota]) {++ {Shp len} shp}
+                (i-app (array {} [%iota]) {++ {Shp len} shp}
                        : {++ {Shp len} shp})))))
           {Shp 2 3} 5
           : {++ len shp}))
@@ -189,7 +189,7 @@
      {++ len shp}
      [(scl:e
        (λ ()
-         (i-app (array {} [iota]) {++ {Shp 5} {Shp 2 3}}
+         (i-app (array {} [%iota]) {++ {Shp 5} {Shp 2 3}}
                 : {++ {Shp 5} {Shp 2 3}})))])))
   ;; Test for collapse step
   (check-step
@@ -204,10 +204,10 @@
   ;; Test for let-box step
   (check-step
    (term (unbox (z m (scl:e (box 3 (array {3 3} [1 2 3 4 5 6 7 8 9]))))
-           ((i-app (scl:e length) z {Shp z} : {Shp})
+           ((i-app (scl:e %length) z {Shp z} : {Shp})
             (m :: {Shp 3 3})
             : {Shp})))
-   (term ((i-app (scl:e length) 3 {Shp 3} : {Shp})
+   (term ((i-app (scl:e %length) 3 {Shp 3} : {Shp})
           ((array {3 3} [1 2 3 4 5 6 7 8 9])
            :: {Shp 3 3})
           : {Shp}))))

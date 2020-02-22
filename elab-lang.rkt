@@ -2,7 +2,7 @@
 
 (require redex
          "implicit-lang.rkt"
-         "language.rkt")
+         (except-in "language.rkt" Scl scl))
 
 (provide Remora-explicit*
          Remora-implicit*

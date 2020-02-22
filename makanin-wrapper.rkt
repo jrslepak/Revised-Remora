@@ -4,7 +4,7 @@
          makanin/solve
          "language.rkt"
          "implicit-lang.rkt"
-         "elab-lang.rkt"
+         (except-in "elab-lang.rkt" Scl scl)
          (for-syntax syntax/parse
                      racket/syntax))
 (provide solutions)

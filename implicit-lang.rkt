@@ -7,7 +7,9 @@
          #;Inormalize-idx)
 
 (define-language Remora-implicit
-  (var variable-not-otherwise-mentioned)
+  (var + - * and or not > < =
+       length shape reduce iota reshape
+       variable-not-otherwise-mentioned)
   (evar var #;(variable-prefix ?))
   ;; Several classes of vars, which effectively carry their kind/sort
   (dvar (variable-prefix $))

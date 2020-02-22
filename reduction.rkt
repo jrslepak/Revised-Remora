@@ -181,45 +181,45 @@
                       (scl (λ [(x (Array Int {Shp 3 3}))] x))]))))
   ;;; Lift reduction
   (check-step
-   (term ((array {} [+])
+   (term ((array {} [%+])
           (array {3 2} [1 2 3 4 5 6])
           (array {3} [9 8 7])))
-   (list (term ((array {3 2} [+ + + + + +])
+   (list (term ((array {3 2} [%+ %+ %+ %+ %+ %+])
                 (array {3 2} [1 2 3 4 5 6])
                 (array {3 2} [9 9 8 8 7 7])))))
   ;;; Map reduction
   (check-step
    (term ((array {3} [(λ [(x (Array Int {Shp 2}))
                           (y (Array Int {Shp 2}))]
-                        ((scl +) x y))
+                        ((scl %+) x y))
                       (λ [(x (Array Int {Shp 2}))
                           (y (Array Int {Shp 2}))]
-                        ((scl +) x y))
+                        ((scl %+) x y))
                       (λ [(x (Array Int {Shp 2}))
                           (y (Array Int {Shp 2}))]
-                        ((scl +) x y))])
+                        ((scl %+) x y))])
           (array {3 2} [1 2 3 4 5 6])
           (array {3 2} [9 8 7 6 5 4])))
    (list
     (term (frame {3} [((scl (λ [(x (Array Int {Shp 2}))
-                                (y (Array Int {Shp 2}))] ((scl +) x y)))
+                                (y (Array Int {Shp 2}))] ((scl %+) x y)))
                        (array {2} [1 2])
                        (array {2} [9 8]))
                       ((scl (λ [(x (Array Int {Shp 2}))
-                                (y (Array Int {Shp 2}))] ((scl +) x y)))
+                                (y (Array Int {Shp 2}))] ((scl %+) x y)))
                        (array {2} [3 4])
                        (array {2} [7 6]))
                       ((scl (λ [(x (Array Int {Shp 2}))
-                                (y (Array Int {Shp 2}))] ((scl +) x y)))
+                                (y (Array Int {Shp 2}))] ((scl %+) x y)))
                        (array {2} [5 6])
                        (array {2} [5 4]))]))))
   ;;; β reduction
   (check-step
    (term ((scl (λ [(x (Scl Int))
                    (y (Scl Int))]
-                 ((scl +) x y)))
+                 ((scl %+) x y)))
           (scl 10) (scl 20)))
-   (list (term ((scl +) (scl 10) (scl 20)))))
+   (list (term ((scl %+) (scl 10) (scl 20)))))
   ;;; δ reduction
   ;;; Collapse reduction
   (check-step
@@ -233,20 +233,20 @@
   (check-step
    (term (unbox [l a (scl (box 3 (array {2 3} [1 2 3 4 5 6])
                                (Σ [(d Dim)] (Array Int {Shp 2 d}))))]
-           ((i-app (t-app (scl length) Int) l {Shp}) a)))
+           ((i-app (t-app (scl %length) Int) l {Shp}) a)))
    (list (term (frame {}
-                      [((i-app (t-app (scl length) Int) 3 {Shp})
+                      [((i-app (t-app (scl %length) Int) 3 {Shp})
                         (array {2 3} [1 2 3 4 5 6]))]))))
   (check-step
    (term (unbox [l a (array {2} [(box 3 (array {3} [1 2 3])
                                       (Σ [(d Dim)] (Array Int {Shp d})))
                                  (box 3 (array {3} [4 5 6])
                                       (Σ [(d Dim)] (Array Int {Shp d})))])]
-           ((i-app (t-app (scl length) Int) l {Shp}) a)))
+           ((i-app (t-app (scl %length) Int) l {Shp}) a)))
    (list (term (frame {2}
-                      [((i-app (t-app (scl length) Int) 3 {Shp})
+                      [((i-app (t-app (scl %length) Int) 3 {Shp})
                         (array {3} [1 2 3]))
-                       ((i-app (t-app (scl length) Int) 3 {Shp})
+                       ((i-app (t-app (scl %length) Int) 3 {Shp})
                         (array {3} [4 5 6]))])))))
 
 
