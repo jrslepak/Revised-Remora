@@ -89,7 +89,7 @@
          ...
          : idx_out)
         (frame
-         idx_out
+         idx_frame
          [((array {} [atval:e_f])
            ((array {natural_in ...}
                    [atval:e_cell ...])

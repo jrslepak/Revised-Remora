@@ -268,10 +268,10 @@
   [(apply-env/e:atom _ op) op]
   [(apply-env/e:atom env (λ [(var e:type) ...] e:expr))
    (λ [(var (apply-env/e:type env e:type)) ...] (apply-env/e:expr env e:expr))]
-  [(apply-env/e:atom env (Tλ [(var e:kind) ...] e:expr))
-   (λ [(var e:kind) ...] (apply-env/e:expr env e:expr))]
-  [(apply-env/e:atom env (Iλ [(var e:sort) ...] e:expr))
-   (λ [(var e:sort) ...] (apply-env/e:expr env e:expr))]
+  [(apply-env/e:atom env (tλ [(var e:kind) ...] e:expr))
+   (tλ [(var e:kind) ...] (apply-env/e:expr env e:expr))]
+  [(apply-env/e:atom env (iλ [(var e:sort) ...] e:expr))
+   (iλ [(var e:sort) ...] (apply-env/e:expr env e:expr))]
   [(apply-env/e:atom env (box e:idx ... e:expr e:type))
    (box (apply-env/e:idx env e:idx) ...
         (apply-env/e:expr env e:expr)
@@ -380,17 +380,18 @@
 ;;; Lift an atom coercion to an array coercion that performs the atom coercion
 ;;; on each atom in the array.
 (define-metafunction Remora-elab
-  lift-atom-coercion : e:actx -> e:ectx
-  [(lift-atom-coercion hole) hole]
-  [(lift-atom-coercion e:actx) ((scl (λ [(coerce (Scl atmtype))]
-                                       (in-hole e:actx coerce)))
-                                hole)])
+  lift-atom-coercion : atmtype e:actx -> e:ectx
+  [(lift-atom-coercion _ hole) hole]
+  [(lift-atom-coercion atmtype e:actx)
+   ((scl (λ [(coerce (Scl atmtype))]
+           (scl (in-hole e:actx coerce))))
+    hole)])
 
 ;;; Construct a function coercion from the input and output coercions
 (define-metafunction Remora-elab
-  fn-coercion : [arrtype ...] [arrtype ...] [e:ectx ...] e:ectx -> e:actx
-  [(fn-coercion _ _ [hole ...] hole) hole]
-  [(fn-coercion [arrtype_inl ...] [arrtype_inh ...]
+  fn-coercion : [arrtype ...] [arrtype ...] arrtype [e:ectx ...] e:ectx -> e:actx
+  [(fn-coercion _ _ _ [hole ...] hole) hole]
+  [(fn-coercion [arrtype_inl ...] [arrtype_inh ...] arrtype_outl
                 [e:ectx_in ...] e:ectx_out)
    ((array
      ()

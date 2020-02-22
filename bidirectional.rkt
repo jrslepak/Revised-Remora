@@ -49,19 +49,19 @@
   [(synth/expr [env-entry_0 ...] archive_0
                expr_s
                ;; TODO: subtyping to reconcile possible exvar with need for Σ
-               (Σ [ivar_s ...] arrtype_s)
+               (Array (Σ [ivar_s ...] arrtype_s) shp_f)
                [env-entry_1 ...] archive_1
                e:expr_s)
    ;; The unbox arity tells how many Σ-bound ivars to demand
    (side-condition ,(= (length (term (ivar ...)) (term (ivar_s ...)))))
    (synth/expr [env-entry_1 ...
                 ivar ...
-                (evar : (subst* arrtype_s [(ivar_s ivar) ...]))]
+                (evar (subst* arrtype_s [(ivar_s ivar) ...]))]
                archive_1
                expr_b
                arrtype_b
                [env-entry_n ...
-                ivar ... (evar : _)
+                ivar ... (evar _)
                 _ ...]
                archive_2
                e:expr_b)
@@ -462,7 +462,7 @@
                  (Array (-> [arrtype_inl ...] arrtype_outl) shp_fl)
                  (Array (-> [arrtype_inh ...] arrtype_outh) shp_fh)
                  env_3 archive_3
-                 (fn-coercion [arrtype_inl ...] [arrtype_inh ...]
+                 (fn-coercion [arrtype_inl ...] [arrtype_inh ...] arrtype_outl
                               [e:ectx_in ...] e:ectx_out))]
   [(where var_sm ,(gensym 'SM_)) ; Generate a fresh scope-marking variable
    (subtype/expr
@@ -483,15 +483,18 @@
     [env-entry_0 ... tvar ...] archive_0
     (Array atmtype_lo shp_lo)
     (Array atmtype_hi {++ shp_f shp_c})
-    env_1 archive_1 e:ectx)
+    [env-entry_1 ... tvar ... env-entry_2 ...] archive_1 e:ectx)
    --- sub:∀R
    (subtype/expr
     [env-entry_0 ...] archive_0
     (Array atmtype_lo shp_lo)
     (Array (∀ [tvar ...] (Array atmtype_hi shp_c)) shp_f)
-    env_1 archive_1
+    [env-entry_1 ...] archive_1
     ;; Each shp_c cell needs to get wrapped in the ∀ by tη expansion
-    (coerce-each (Array atmtype_hi shp_c) e:ectx)
+    (coerce-each
+     (Array atmtype_lo shp_c)
+     (scl (tλ [tvar ...]
+              (lift-atom-coercion atmtype_lo e:ectx))))
     #;
     ((array
       {}
@@ -634,7 +637,7 @@
                  (Array atmtype_0 shp_0)
                  (Array atmtype_1 shp_1)
                  env_2 archive_2
-                 (lift-atom-coercion e:actx))])
+                 (lift-atom-coercion atmtype_0 e:actx))])
 
 ;;;;----------------------------------------------------------------------------
 ;;;; Subtype instantiation judgments
@@ -799,11 +802,12 @@
                  env_1 archive_1 [e:ectx_in ...])
    (instL/array env_1 archive_1 (^ tvar_out) arrtype_out
                 env_2 archive_2 e:ectx_out)
-   --- ArrL:->
+   (equate env_2 archive_2 (^ svar_frm) shp_f env_3 archive_3)
+   --- ArrL:->*
    (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (^ tvar) (Array (-> [arrtype_in ...] arrtype_out) shp_f)
-                env_2 archive_2
-                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...]
+                env_3 archive_3
+                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...] (^ tvar_out)
                              [e:ectx_in ...] e:ectx_out))]
   [#;(side-condition ,(printf "Monotype check on ~v: ~v\n"
                             (term atmtype)
@@ -824,7 +828,7 @@
    (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (^ tvar) (Array atmtype shp)
                 env_2 archive_2
-                (lift-atom-coercion e:actx))])
+                (lift-atom-coercion exatmvar e:actx))])
 
 (define-judgment-form Remora-elab
   #:mode (instR/array I I I I O O O)
@@ -890,11 +894,12 @@
                  env_1 archive_1 [e:ectx_in ...])
    (instR/array env_1 archive_1 arrtype_out (^ tvar_out)
                 env_2 archive_2 e:ectx_out)
-   --- ArrR:->
+   (equate env_2 archive_2 (^ svar_frm) shp_f env_3 archive_3)
+   --- ArrR:->*
    (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (Array (-> [arrtype_in ...] arrtype_out) shp_f) (^ tvar)
-                env_2 archive_2
-                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...]
+                env_3 archive_3
+                (fn-coercion [(^ tvar_in) ...] [arrtype_in ...] arrtype_out
                              [e:ectx_in ...] e:ectx_out))]
   [(where exatmvar (^ ,(gensym '&elt_)))
    (where exsvar (^ ,(gensym '@shp_)))
@@ -909,7 +914,7 @@
    (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
                 (Array atmtype shp) (^ tvar)
                 env_2 archive_2
-                (lift-atom-coercion e:actx))])
+                (lift-atom-coercion atmtype e:actx))])
 
 
 ;;; Provide a judgment-form version of the logic used to interpret the solver's
