@@ -443,11 +443,15 @@
 ;;; type variable).
 (define-metafunction Remora-elab
   refine-array-type : env arrtype -> (env arrtype)
-  [(refine-array-type [env-entry_l ... (^ arrvar) env-entry_r ...] (^ arrvar))
+  [(refine-array-type env arrtype)
+   (refine-array-type* env (apply-env/type env arrtype))])
+(define-metafunction Remora-elab
+  refine-array-type* : env arrtype -> (env arrtype)
+  [(refine-array-type* [env-entry_l ... (^ arrvar) env-entry_r ...] (^ arrvar))
    ([env-entry_l ...
      (^ atmvar) (^ svar) (^ arrvar (Array (^ atmvar) (^ svar)))
      env-entry_r ...]
     (Array (^ atmvar) (^ svar)))
    (where svar ,(gensym '@RFN))
    (where atmvar ,(gensym '&RFN))]
-  [(refine-array-type env arrtype) (env arrtype)])
+  [(refine-array-type* env arrtype) (env arrtype)])
