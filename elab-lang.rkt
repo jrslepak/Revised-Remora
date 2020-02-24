@@ -21,7 +21,7 @@
          apply-env/type
          subst*
          lift-atom-coercion fn-coercion coerce-each
-         arg-env-entries
+         arg-env-entries refine-array-type
          uses-exsvar?)
 
 ;;; Define extended versions of implicit/explicit Remora which allow unsolved
@@ -437,3 +437,17 @@
    (where [dvar ...]
      ,(build-list (term natural) (λ (n) (term (dim-tag var ,n)))))
    (where atmvar (atm-tag var))])
+
+;;; Make sure that an array type is split into its atom type and shape so that
+;;; they can be referred to individually (this will still fail for a universal
+;;; type variable).
+(define-metafunction Remora-elab
+  refine-array-type : env arrtype -> (env arrtype)
+  [(refine-array-type [env-entry_l ... (^ arrvar) env-entry_r ...] (^ arrvar))
+   ([env-entry_l ...
+     (^ atmvar) (^ svar) (^ arrvar (Array (^ atmvar) (^ svar)))
+     env-entry_r ...]
+    (Array (^ atmvar) (^ svar)))
+   (where svar ,(gensym '@RFN))
+   (where atmvar ,(gensym '&RFN))]
+  [(refine-array-type env arrtype) (env arrtype)])

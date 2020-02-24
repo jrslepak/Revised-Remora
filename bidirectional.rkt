@@ -94,8 +94,9 @@
                env_1 archive_1
                (array {natural ...} [e:atom ...]))]
   [(synth/exprs env_0 archive_0
-                (expr ...) (Array atmtype shp)
+                (expr ...) arrtype
                 env_1 archive_1 [e:expr ...])
+   (where (env_2 (Array atmtype shp)) (refine-array-type env_1 arrtype))
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (expr ...)))))
    --- syn:frame
@@ -103,7 +104,7 @@
                (frame {natural ...} [expr ...])
                (Array atmtype
                       (Inormalize-idx {++ {Shp natural ...} shp}))
-               env_1 archive_0
+               env_2 archive_1
                (frame {natural ...} [e:expr ...]))]
   [(synth/expr env_0 archive_0
                expr_f arrtype_f
@@ -279,7 +280,9 @@
    ;; result type, output env, output archive,
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
-  [(synth-app [env-entry_0 ... (^ tvar) ...] archive_0
+  [(where ([env-entry_1 ...] (Array atmtype_fun shp_fun))
+     (refine-array-type [env-entry_0 ...] arrtype))
+   (synth-app [env-entry_1 ... (^ tvar) ...] archive_0
               (t-app e:expr_fp (^ tvar) ...)
               (subst* (Array atmtype_fun {++ shp_all shp_fun})
                       [(tvar (^ tvar)) ...])
@@ -289,13 +292,15 @@
               e:expr_fm [e:expr_arg ...])
    --- app:∀
    (synth-app [env-entry_0 ...] archive_0
-              e:expr_fp (Array (∀ [tvar ...] (Array atmtype_fun shp_fun)) shp_all)
+              e:expr_fp (Array (∀ [tvar ...] arrtype) shp_all)
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
               (apply-env/e:expr env_1 e:expr_fm)
               [e:expr_arg ...])]
-  [(synth-app [env-entry_0 ... (^ ivar) ...] archive_0
+  [(where ([env-entry_1 ...] (Array atmtype_fun shp_fun))
+     (refine-array-type [env-entry_0 ...] arrtype))
+   (synth-app [env-entry_1 ... (^ ivar) ...] archive_0
               (i-app e:expr_fp (^ ivar) ...)
               (subst* (Array atmtype_fun {++ shp_all shp_fun})
                       [(ivar (^ ivar)) ...])
@@ -305,7 +310,7 @@
               e:expr_fm [e:expr_arg ...])
    --- app:Π
    (synth-app [env-entry_0 ...] archive_0
-              e:expr_fp (Array (Π [ivar ...] (Array atmtype_fun shp_fun)) shp_all)
+              e:expr_fp (Array (Π [ivar ...] arrtype) shp_all)
               [expr_arg ...]
               arrtype_out
               env_1 archive_1
@@ -313,8 +318,12 @@
               [e:expr_arg ...])]
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
-  [(where svar_afrm ,(gensym '@AFRM_))
-   (where svar_aext ,(gensym '@AEXT_))
+  [(where (env_r (Array atmtype_out shp_out))
+     (refine-array-type env_0 arrtype_out))
+   (where ([env-entry_0 ...] (Array atmtype_in shp_in))
+     (refine-array-type env_r arrtype_in))
+   (where svar_afrm ,(gensym '@AFRM))
+   (where svar_aext ,(gensym '@AEXT))
    (where shp_afrm
      ,(if (term (uses-exsvar? shp_in))
           (term {Shp})
@@ -341,7 +350,7 @@
                          (Array atmtype_out shp_out))
                      shp_fun)
               [expr_rest ...]
-              arrtype_out
+              arrtype_result
               env_3 archive_3
               ;; At this point, there should be no more substantive changes to
               ;; the elaborated function because the ∀/Π layers have all been
@@ -349,19 +358,22 @@
               ;; for environment-application results to provide new info.
               e:expr_fm [e:expr_rest ...])
    --- app:->*f
-   (synth-app [env-entry_0 ...] archive_0
+   (synth-app env_0 archive_0
               e:expr_fun
-              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
-                         (Array atmtype_out shp_out))
+              (Array (-> [arrtype_in arrtype_rest ...] arrtype_out)
                      shp_fun)
               [expr_arg expr_rest ...]
-              arrtype_out
+              arrtype_result
               env_3 archive_3
               e:expr_fm [e:expr_arg e:expr_rest ...])]
   ;; Applying a monomorphic unary function array, where the argument array
   ;; provides the principal frame
-  [(where svar_afrm ,(gensym '@AFRM_))
-   (where svar_fext ,(gensym '@FEXT_))
+  [(where (env_r (Array atmtype_out shp_out))
+     (refine-array-type env_0 arrtype_out))
+   (where ([env-entry_0 ...] (Array atmtype_in shp_in))
+     (refine-array-type env_r arrtype_in))
+   (where svar_afrm ,(gensym '@AFRM))
+   (where svar_fext ,(gensym '@FEXT))
    (where shp_afrm
      ,(if (term (uses-exsvar? shp_in))
           (term {Shp})
@@ -378,27 +390,29 @@
                          (Array atmtype_out shp_out))
                      shp_afrm)
               [expr_rest ...]
-              arrtype_out
+              arrtype_result
               env_3 archive_3
               e:expr_fm [e:expr_rest ...])
    --- app:->*a
-   (synth-app [env-entry_0 ...] archive_0
-              e:expr_fun
-              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
-                         (Array atmtype_out shp_out))
-                     shp_fun)
-              [expr_arg expr_rest ...]
-              arrtype_out
-              env_3 archive_3
-              e:expr_fm [e:expr_arg e:expr_rest ...])]
-  [--- app:->0
    (synth-app env_0 archive_0
               e:expr_fun
-              (Array (-> [] (Array atmtype_out shp_out))
+              (Array (-> [arrtype_in arrtype_rest ...]
+                         arrtype_out)
+                     shp_fun)
+              [expr_arg expr_rest ...]
+              arrtype_result
+              env_3 archive_3
+              e:expr_fm [e:expr_arg e:expr_rest ...])]
+  [(where (env_1 (Array atmtype_out shp_out))
+     (refine-array-type env_0 arrtype_out))
+   --- app:->0
+   (synth-app env_0 archive_0
+              e:expr_fun
+              (Array (-> [] arrtype_out)
                      shp_fun)
               []
               (Array atmtype_out {++ shp_fun shp_out})
-              env_0 archive_0
+              env_1 archive_0
               e:expr_fun [])])
 
 ;;;;----------------------------------------------------------------------------
@@ -411,6 +425,9 @@
    (subtype/atom env archive base-type base-type env archive hole)]
   [--- sub:atmvar
    (subtype/atom env archive atmvar atmvar env archive hole)]
+    [--- sub:exatmvar
+   (subtype/atom env archive exatmvar exatmvar env archive hole)]
+
   [;; TODO: occurs check
    (side-condition
     ,(not (redex-match?
@@ -473,6 +490,8 @@
     hole)]
   [--- sub:arrvar
    (subtype/expr env archive arrvar arrvar env archive hole)]
+  [--- sub:exarrvar
+   (subtype/expr env archive exarrvar exarrvar env archive hole)]
   [(equate env_0 archive_0 shp_fl shp_fh env_1 archive_1)
    (subtype/exprs env_1 archive_1
                   [arrtype_inh ...] [arrtype_inl ...]
