@@ -9,7 +9,7 @@
          op->Itype
          Remora-elab
          monotype?
-         scl Scl
+         scl Scl DT DR DS
          Inormalize-idx Inormalize-type
          elab-type
          ivar->bind tvar->bind
@@ -42,7 +42,16 @@
   (adim .... exdvar)
   (exsvar (^ svar))
   (shp .... exsvar)
-  (fshp .... exsvar))
+  (fshp .... exsvar)
+  ;; Syntactic sugar for types
+  (stype (^ tvar) tvar base-type
+         (-> [stype ...] stype)
+         (∀ [tvar ...] stype)
+         (Π [ivar ...] stype)
+         (Σ [ivar ...] stype)
+         [atmtype sidx ...])
+  (sidx (^ ivar) ivar natural {+ dim ...}
+        {Shp dim ...} {++ sidx ...}))
 (define-extended-language Remora-explicit* Remora-explicit
   (type .... (^ var))
   (idx .... (^ var) {- idx idx} {* natural idx} {/ idx postive-integer})
@@ -69,6 +78,28 @@
 (define-metafunction Remora-elab
     Scl : type -> type
     [(Scl type) (Array type {Shp})])
+
+(define-metafunction Remora-implicit*
+  DT : stype -> atmtype
+  [(DT atmvar) atmvar]
+  [(DT exatmvar) exatmvar]
+  [(DT base-type) base-type]
+  [(DT (-> [stype_in ...] stype_out)) (-> [(DR stype_in) ...] (DR stype_out))]
+  [(DT (∀ [tvar ...] stype)) (∀ [tvar ...] (DR stype))]
+  [(DT (Π [ivar ...] stype)) (Π [ivar ...] (DR stype))]
+  [(DT (Σ [ivar ...] stype)) (Σ [ivar ...] (DR stype))])
+(define-metafunction Remora-implicit*
+  DR : stype -> arrtype
+  [(DR arrvar) arrvar]
+  [(DR exarrvar) exarrvar]
+  [(DR [stype sidx ...]) (Array (DT stype) (Inormalize-idx {++ (DS sidx) ...}))]
+  [(DR stype) (Array (DT stype) {Shp})])
+(define-metafunction Remora-implicit*
+  DS : sidx -> shp
+  [(DS svar) svar]
+  [(DS exsvar) exsvar]
+  [(DS {++ sidx ...}) {++ (DS sidx) ...}]
+  [(DS sidx) {Shp sidx}])
 
 (define-metafunction Remora-elab
   uses-exsvar? : shp -> boolean
