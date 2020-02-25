@@ -1274,3 +1274,277 @@
    (instR/arrays env_0 archive_0
                  [arrtype_0 arrtype_1 ...] [(^ arrvar_0) (^ arrvar_1) ...]
                  env_2 archive_2 [e:ectx_0 e:ectx_1 ...])])
+
+
+
+;;;;----------------------------------------------------------------------------
+;;;; Demo cases
+;;;;----------------------------------------------------------------------------
+(module+ demo
+  (define-syntax-rule
+    (test description check ...)
+    (begin (displayln description)
+           check ...
+           (printf "\n\n")))
+
+  (test "simple application"
+        (judgment-holds
+         (synth/expr [(+ (DR (-> [Int Int] Int)))] []
+                     (+ (array {} [40]) (array {} [2]))
+                     type env archive e:expr)
+         {type env archive e:expr}))
+  
+  (test "vector + scalar -- identify frame"
+   (judgment-holds
+    (synth/expr [(+ (DR (-> [Int Int] Int)))] []
+                (+ (array {3} [4 5 6]) (array {} [2]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "vector + matrix -- identify frame"
+   (judgment-holds
+    (synth/expr [(+ (DR (-> [Int Int] Int)))] []
+                (+ (array {3} [100 200 300])
+                   (array {3 4} [1 2 3 4 5 6 7 8 9 10 11 12]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "MISD -- identify frame"
+   (judgment-holds
+    (synth/expr [(+ (DR (-> [Int Int] Int)))
+                 (- (DR (-> [Int Int] Int)))
+                 (* (DR (-> [Int Int] Int)))]
+                []
+                ((frame {3} [+ * -]) (array {} [10]) (array {} [5]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "mismatched vector + vector -- unsatisfiable shape constraint"
+   (judgment-holds
+    (synth/expr [(+ (DR (-> [Int Int] Int)))] []
+                (+ (array {3} [4 5 6]) (array {8} [1 2 3 4 5 6 7 8]))
+                type env archive e:expr)
+    archive))
+  
+  (test "id0 -- generate monotype with atmtype hole"
+   (judgment-holds
+    (synth/atom [] []
+                (λ [(x 0)] x)
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "id2 -- generate monotype with atmtype hole and two dim holes"
+   (judgment-holds
+    (synth/atom [] []
+                (λ [(x 2)] x)
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "id∞ -- generate monotype with atmtype hole and shp hole"
+   (judgment-holds
+    (synth/atom [] []
+                (λ [(x all)] x)
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "apply id0 -- selecting atom type"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x 0)] x)])
+                 (array {} [#t]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "id0 -- selecting atom type and frame shape"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x 0)] x)])
+                 (array {2 3} [10 20 30 40 50 60]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "apply id2 -- selecting atom type and two cell dims"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x 2)] x)])
+                 (array {2 3} [10 20 30 40 50 60]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "apply id∞ -- selecting array type"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x all)] x)])
+                 (array {2 3} [10 20 30 40 50 60]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "construct ∀id0 -- generalize atmtype hole"
+   (judgment-holds
+    (synth/atom [] []
+                ((λ [(x 0)] x)
+                 : (∀ [&t] (Array (-> [(Array &t (Shp))]
+                                      (Array &t (Shp))) (Shp))))
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "construct ∀id∞ -- generalize arrtype hole"
+   (judgment-holds
+    (synth/atom [] []
+                ((λ [(x all)] x)
+                 : (∀ [*t] (Array (-> [*t] *t) (Shp))))
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "alternative (shape monomorphic) ∀id∞ -- generalize atmtype hole, retain shp hole"
+   (judgment-holds
+    (synth/atom [] []
+                ((λ [(x all)] x)
+                 : (∀ [&t] (Array (-> [(Array &t (Shp))] (Array &t (Shp))) (Shp))))
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "apply ∀id0 -- generalize, then select atom type argument"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [((λ [(x 0)] x)
+                             : (∀ [&t] (Array (-> [(Array &t (Shp))]
+                                                  (Array &t (Shp))) (Shp))))])
+                 (array {} [5]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "lift ∀id0 -- generalize, then select atom type argument and frame shape"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [((λ [(x 0)] x)
+                             : (∀ [&t] (Array (-> [(Array &t (Shp))]
+                                                  (Array &t (Shp))) (Shp))))])
+                 (array {3} [5 10 15]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "apply ∀id∞ -- generalize, then select array type argument"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [((λ [(x all)] x)
+                             : (∀ [*t] (Array (-> [*t] *t) (Shp))))])
+                 (array {3} [5 10 15]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "construct ∀Πid∞ -- generalize arrtype hole"
+   (judgment-holds
+    (synth/atom [] []
+                ((λ [(x all)] x)
+                 : (∀ [&t]
+                     (Array
+                      (Π [@t]
+                        (Array (-> [(Array &t @t)] (Array &t @t)) (Shp))) (Shp))))
+                type env archive e:atom)
+    {type env archive e:atom}))
+  
+  (test "annotate extra arg -- recognize arity mismatch"
+   (judgment-holds
+    (synth/atom [&t] []
+                ((λ [(x 0)] x)
+                 : (-> [(Array &t (Shp))
+                        (Array &t (Shp))]
+                       (Array &t (Shp))))
+                _ _ _ _)))
+  
+  (test "pass too few args -- recognize arity mismatch"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x 0) (y 0)] x)])
+                 (array {} [7]))
+                _ _ _ _)))
+  
+  (test "pass too many args -- recognize arity mismatch"
+   (judgment-holds
+    (synth/expr [] []
+                ((array {} [(λ [(x 0) (y 0)] x)])
+                 (array {} [5])
+                 (array {} [6])
+                 (array {} [7]))
+                _ _ _ _)))
+  
+  (test "outer product -- identify two frames and a cell shape"
+   (judgment-holds
+    (synth/expr [(* (DR (-> [Int Int] Int)))]
+                []
+                ((array {} [(λ [(x 0) (y 1)] (* x y))])
+                 (array {3} [10 20 30])
+                 (array {2} [5 6]))
+                type env archive e:expr)
+    {type env archive e:expr}))
+  
+  (test "nonempty vector norm -- instantiate polymorphic function"
+        (judgment-holds
+         (synth/atom [(sqrt (DR (-> [Int] Int)))
+                      (* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (reduce/0 (DR (∀ [&t]
+                                      (Π [$l @c]
+                                        (-> [(-> [[&t @c] [&t @c]] [&t @c])
+                                             [&t @c]
+                                             [&t $l @c]]
+                                            [&t @c])))))]
+                     []
+                     (λ [(v 1)] (sqrt (reduce/0 + (scl 0) (* v v))))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+  
+  (test "vector norm -- instantiate polymorphic function, propagate length constraint"
+        ;; The resulting type looks agnostic about input length, but using
+        ;; an argument that's too short leads to an UNSAT constraint archive.
+        (judgment-holds
+         (synth/atom [(sqrt (DR (-> [Int] Int)))
+                      (* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (reduce (DR (∀ [&t]
+                                    (Π [$l @c]
+                                      (-> [(-> [[&t @c] [&t @c]] [&t @c])
+                                           [&t (+ 1 $l) @c]]
+                                          [&t @c])))))]
+                     []
+                     (λ [(v 1)] (sqrt (reduce + (* v v))))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+  (test "mis-applying length-restricted norm -- length constraint UNSAT"
+        (judgment-holds
+         (synth/expr [(sqrt (DR (-> [Int] Int)))
+                      (* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (reduce (DR (∀ [&t]
+                                    (Π [$l @c]
+                                      (-> [(-> [[&t @c] [&t @c]] [&t @c])
+                                           [&t (+ 1 $l) @c]]
+                                          [&t @c])))))]
+                     []
+                     ((scl (λ [(v 1)] (sqrt (reduce + (* v v)))))
+                      (array {0} []))
+                     type env archive e:expr)
+         archive))
+  
+  (test "vec+ -- recognize aliasing between argument dimensions"
+        (judgment-holds
+         (synth/atom [(+ (DR (-> [Int Int] Int)))]
+                     []
+                     (λ [(x 1) (y 1)] (+ x y))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+  
+  (test "transpose+ -- instantiate polymorphic function, leading to dimension aliasing"
+        (judgment-holds
+         (synth/atom [(+ (DR (-> [Int Int] Int)))
+                      (transpose (DR (∀ [&t] (Π [$m $n] (-> [[&t $m $n]] [&t $n $m])))))]
+                     []
+                     (λ [(x 2)] (+ x (transpose x)))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+  
+  ;;; mtx* -- combine several tricky steps (inst, dim aliasing, frame selection)
+  ;;; 1D stencil convolution -- build iteration space, identify its shape
+  ;;; poly/monomorphic functions coexisting -- instantiate sub-array
+  )
