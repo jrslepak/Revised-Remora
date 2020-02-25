@@ -425,7 +425,7 @@
    (subtype/atom env archive base-type base-type env archive hole)]
   [--- sub:atmvar
    (subtype/atom env archive atmvar atmvar env archive hole)]
-    [--- sub:exatmvar
+  [--- sub:exatmvar
    (subtype/atom env archive exatmvar exatmvar env archive hole)]
 
   [;; TODO: occurs check
@@ -471,23 +471,6 @@
    (instR/array env_0 archive_0 arrtype exarrvar env_1 archive_1 e:ectx)
    --- sub:instR/array
    (subtype/expr env_0 archive_0 arrtype exarrvar env_1 archive_1 e:ectx)]
-  ;; TODO: Should these three (base/atmvar/arrvar) be subsumed by a refl rule?
-  [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
-   --- sub:base
-   (subtype/expr
-    env_0 archive_0
-    (Array base-type shp_0)
-    (Array base-type shp_1)
-    env_1 archive_1
-    hole)]
-  [(equate env_0 archive_0 shp_0 shp_1 env_1 archive_1)
-   --- sub:atmvar
-   (subtype/expr
-    env_0 archive_0
-    (Array atmvar shp_0)
-    (Array atmvar shp_1)
-    env_1 archive_1
-    hole)]
   [--- sub:arrvar
    (subtype/expr env archive arrvar arrvar env archive hole)]
   [--- sub:exarrvar
@@ -1147,10 +1130,10 @@
    --- syn*:base
    (synth/atoms env_0 archive_0 [atom] atmtype env_1 archive_1 [e:atom])]
   [(synth/atom env_0 archive_0 atom_0 atmtype_join env_1 archive_1 e:atom_0)
-   (check/atoms env_1 archive_1 [atom_1 ...] atmtype_join env_n archive_n [e:atom_1 ...])
+   (check/atoms env_1 archive_1 [atom_1 atom_2 ...] atmtype_join env_n archive_n [e:atom_1 ...])
    ;; TODO: replace with join operation on types with exvars
    --- syn*
-   (synth/atoms env_0 archive_0 [atom_0 atom_1 ...+] atmtype_join
+   (synth/atoms env_0 archive_0 [atom_0 atom_1 atom_2 ...] atmtype_join
                 env_n archive_n [e:atom_0 e:atom_1 ...])])
 
 (define-judgment-form Remora-elab
@@ -1160,10 +1143,10 @@
    --- syn*:base
    (synth/exprs env_0 archive_0 [expr] arrtype env_1 archive_1 [e:expr])]
   [(synth/expr env_0 archive_0 expr_0 arrtype_join env_1 archive_1 e:expr_0)
-   (check/exprs env_1 archive_1 [expr_1 ...] arrtype_join env_n archive_n [e:expr_1 ...])
+   (check/exprs env_1 archive_1 [expr_1 expr_2 ...] arrtype_join env_n archive_n [e:expr_1 ...])
    ;; TODO: replace with join operation on types with exvars
    --- syn*
-   (synth/exprs env_0 archive_0 [expr_0 expr_1 ...+] arrtype_join
+   (synth/exprs env_0 archive_0 [expr_0 expr_1 expr_2 ...] arrtype_join
                 env_n archive_n [e:expr_0 e:expr_1 ...])])
 
 (define-judgment-form Remora-elab
