@@ -49,7 +49,7 @@
          (∀ [tvar ...] stype)
          (Π [ivar ...] stype)
          (Σ [ivar ...] stype)
-         [atmtype sidx ...])
+         [stype sidx ...])
   (sidx (^ ivar) ivar natural {+ dim ...}
         {Shp dim ...} {++ sidx ...}))
 (define-extended-language Remora-explicit* Remora-explicit
