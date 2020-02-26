@@ -4,6 +4,7 @@
 (provide Remora-implicit
          IScl Iscl I&-> I&Π I&Σ I&∀ I&
          op->Itype
+         rerank
          #;Inormalize-idx)
 
 (define-language Remora-implicit
@@ -163,3 +164,10 @@
                            (I&Π [$r @old]
                                 (I&-> [(Array Int {Shp $r}) (Array &t @old)]
                                       (I&Σ [@new] (Array &t @new))))))])
+
+(define-metafunction Remora-implicit
+  rerank : [spec ...] expr -> expr
+  [(rerank [spec ...] expr)
+   (array {} [(λ [(var_fresh spec) ...] (expr var_fresh ...))])
+   (where [var_fresh ...]
+     ,(build-list (length (term (spec ...))) (λ _ (gensym 'RR_))))])

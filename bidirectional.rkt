@@ -1456,11 +1456,23 @@
    (judgment-holds
     (synth/expr [(* (DR (-> [Int Int] Int)))]
                 []
-                ((array {} [(λ [(x 0) (y 1)] (* x y))])
+                ((rerank [0 1] *)
                  (array {3} [10 20 30])
                  (array {2} [5 6]))
                 type env archive e:expr)
     {type env archive e:expr}))
+
+  (test "length -- select shape and dim arguments"
+        (judgment-holds
+         (synth/expr [(length (DR (∀ [&t] (Π [$l @c] (-> [[&t $l @c]] Int)))))]
+                     []
+                     (length (array {3 2 4}
+                                    [ 1  2  3  4  5  6
+                                      7  8  9 10 11 12
+                                     13 14 15 16 17 18
+                                     19 20 21 22 23 24]))
+                     type env archive e:expr)
+         {type env archive e:expr}))
   
   (test "nonempty vector norm -- instantiate polymorphic function"
         (judgment-holds
@@ -1494,6 +1506,21 @@
                      (λ [(v 1)] (sqrt (reduce + (* v v))))
                      type env archive e:atom)
          {type env archive e:atom}))
+  (test "applying length-restricted norm -- length constraint SAT"
+        (judgment-holds
+         (synth/expr [(sqrt (DR (-> [Int] Int)))
+                      (* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (reduce (DR (∀ [&t]
+                                    (Π [$l @c]
+                                      (-> [(-> [[&t @c] [&t @c]] [&t @c])
+                                           [&t (+ 1 $l) @c]]
+                                          [&t @c])))))]
+                     []
+                     ((scl (λ [(v 1)] (sqrt (reduce + (* v v)))))
+                      (array {2} [4 3]))
+                     type env archive e:expr)
+         {type env archive e:expr}))
   (test "mis-applying length-restricted norm -- length constraint UNSAT"
         (judgment-holds
          (synth/expr [(sqrt (DR (-> [Int] Int)))
@@ -1514,7 +1541,7 @@
         (judgment-holds
          (synth/atom [(+ (DR (-> [Int Int] Int)))]
                      []
-                     (λ [(x 1) (y 1)] (+ x y))
+                     (rerank [1 1] +)
                      type env archive e:atom)
          {type env archive e:atom}))
   
@@ -1527,7 +1554,66 @@
                      type env archive e:atom)
          {type env archive e:atom}))
   
-  ;;; mtx* -- combine several tricky steps (inst, dim aliasing, frame selection)
-  ;;; 1D stencil convolution -- build iteration space, identify its shape
+  (test "1D stencil -- build iteration space, recognize its shape"
+        (judgment-holds
+         (synth/atom [(* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (iota/w (DR (∀ [&t0] (Π [@s] (-> [[&t0 @s]]
+                                                       [Int @s])))))
+                      (rotate (DR (∀ [&t1] (Π [$l1 @c1] (-> [[Int]
+                                                             [&t1 $l1 @c1]]
+                                                            [&t1 $l1 @c1])))))
+                      (reduce/0 (DR (∀ [&t2] (Π [$l2 @c2]
+                                               (-> [(-> [[&t2 @c2] [&t2 @c2]] [&t2 @c2])
+                                                    [&t2 @c2]
+                                                    [&t2 $l2 @c2]]
+                                                   [&t2 @c2])))))]
+                     []
+                     (λ [(weights 1) (signal 1)]
+                       (reduce/0 (rerank [1 1] +)
+                                 ((scl (λ [(k 0)] (scl 0))) signal)
+                                 (* weights (rotate (iota/w weights) signal))))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+
+  (test "1D stencil with \"liftable reduce\" -- add in lift-shape recognition"
+        (judgment-holds
+         (synth/atom [(* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (iota/w (DR (∀ [&t0] (Π [@s] (-> [[&t0 @s]]
+                                                       [Int @s])))))
+                      (rotate (DR (∀ [&t1] (Π [$l1 @c1] (-> [[Int]
+                                                             [&t1 $l1 @c1]]
+                                                            [&t1 $l1 @c1])))))
+                      (reduce/L0 (DR (∀ [&t2] (Π [$l2 @f2 @c2]
+                                                (-> [(-> [[&t2 @c2] [&t2 @c2]] [&t2 @c2])
+                                                     [&t2 @c2]
+                                                     [&t2 $l2 @f2 @c2]]
+                                                    [&t2 @f2 @c2])))))]
+                     []
+                     (λ [(weights 1) (signal 1)]
+                       (reduce/L0 + (array {} [0]) (* weights (rotate (iota/w weights) signal))))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+
+  (test "mtx* -- reranking, instantiation, dim aliasing, frame selection"
+        (judgment-holds
+         (synth/atom [(* (DR (-> [Int Int] Int)))
+                      (+ (DR (-> [Int Int] Int)))
+                      (reduce/L0 (DR (∀ [&t2] (Π [$l2 @f2 @c2]
+                                                (-> [(-> [[&t2 @c2] [&t2 @c2]] [&t2 @c2])
+                                                     [&t2 @c2]
+                                                     [&t2 $l2 @f2 @c2]]
+                                                    [&t2 @f2 @c2])))))]
+                     []
+                     (λ [(a 2) (b 2)]
+                       ((rerank [0 0 2] reduce/L0)
+                        + (scl 0)
+                        ((rerank [1 2] *) a b)))
+                     type env archive e:atom)
+         {type env archive e:atom}))
+  #;(define (m*m [a 2] [b 2])
+      (~(0 0 2)reduce/zero + 0 (~(1 2)* a b)))
+  
   ;;; poly/monomorphic functions coexisting -- instantiate sub-array
   )

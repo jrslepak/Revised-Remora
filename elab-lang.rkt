@@ -6,7 +6,7 @@
 
 (provide Remora-explicit*
          Remora-implicit*
-         op->Itype
+         op->Itype rerank
          Remora-elab
          monotype?
          scl Scl DT DR DS
