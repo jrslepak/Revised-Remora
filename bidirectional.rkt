@@ -1624,8 +1624,6 @@
                         ((rerank [1 2] *) a b)))
                      type env archive e:atom)
          {type env archive e:atom}))
-  #;(define (m*m [a 2] [b 2])
-      (~(0 0 2)reduce/zero + 0 (~(1 2)* a b)))
   
   (test "poly/monomorphic functions coexisting -- instantiate sub-array"
         (judgment-holds
@@ -1652,5 +1650,15 @@
                        (λ [(x (Array (Σ [$d] (Array Int (Shp $d))) (Shp)))]
                          (unbox ($l v x) (length v))))
                       (scl (box 4 (array {4} [1 2 3 4]))))
-                     type env archive any)
-         {type env archive any})))
+                     type env archive e:expr)
+         {type env archive e:expr}))
+
+  (test "misuse of unboxing"
+        (judgment-holds
+         (synth/expr [(reverse (DR (∀ [&t] (Π [$l @c] (-> [[&t $l @c]] [&t $l @c])))))]
+                     []
+                     ((scl
+                       (λ [(x (Array (Σ [$d] (Array Int (Shp $d))) (Shp)))]
+                         (unbox ($l v x) (reverse v))))
+                      (scl (box 4 (array {4} [1 2 3 4]))))
+                     _ _ _ _))))
