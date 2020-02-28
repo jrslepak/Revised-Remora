@@ -22,7 +22,7 @@
          subst*
          lift-atom-coercion fn-coercion coerce-each
          arg-env-entries refine-array-type
-         uses-exsvar?)
+         uses-exsvar? uses-svar? cell-polymorphic?)
 
 ;;; Define extended versions of implicit/explicit Remora which allow unsolved
 ;;; existential variables.
@@ -109,6 +109,23 @@
   [(uses-exsvar? {++ shp ...})
    ,(for/or ([s (term (shp ...))])
             (term (uses-exsvar? ,s)))])
+(define-metafunction Remora-elab
+  uses-svar? : shp -> boolean
+  [(uses-svar? exsvar) #t]
+  [(uses-svar? svar) #f]
+  [(uses-svar? {Shp _ ...}) #f]
+  [(uses-svar? {++ shp ...})
+   ,(for/or ([s (term (shp ...))])
+            (term (uses-svar? ,s)))])
+
+(define-metafunction Remora-elab
+  cell-polymorphic? : arrtype -> boolean
+  [(cell-polymorphic? arrvar) #t]
+  [(cell-polymorphic? exarrvar) #t]
+  [(cell-polymorphic? (Array _ shp))
+   ,(or (term (uses-exsvar? shp))
+        (term (uses-svar? shp)))]
+  [(cell-polymorphic? _) #f])
 
 (define-metafunction Remora-elab
   Inormalize-idx : idx -> nidx

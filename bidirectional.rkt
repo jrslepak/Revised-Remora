@@ -318,21 +318,14 @@
               [e:expr_arg ...])]
   ;; Applying a monomorphic unary function array, where the function array
   ;; provides the principal frame
-  [(where (env_r (Array atmtype_out shp_out))
-     (refine-array-type env_0 arrtype_out))
-   (where ([env-entry_0 ...] (Array atmtype_in shp_in))
-     (refine-array-type env_r arrtype_in))
+  [(side-condition ,(not (term (cell-polymorphic? (Array atmtype_in shp_in)))))
    (where svar_afrm ,(gensym '@AFRM))
    (where svar_aext ,(gensym '@AEXT))
-   (where shp_afrm
-     ,(if (term (uses-exsvar? shp_in))
-          (term {Shp})
-          (term (^ svar_afrm))))
    (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_aext)] archive_0
-               expr_arg (Array atmtype_in {++ shp_afrm shp_in})
+               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 shp_fun {++ shp_afrm (^ svar_aext)}
+   (equate env_1 archive_1 shp_fun {++ (^ svar_afrm) (^ svar_aext)}
            env_2 archive_2)
    ;; If both the function and argument arrays have the same frame shape, then
    ;; we might use either app:->*f or app:->*a. Prune off this version in that
@@ -346,9 +339,7 @@
    ;; shape so far" at this point in processing the whole n-ary application.
    (synth-app env_2 archive_2
               e:expr_fun
-              (Array (-> [arrtype_rest ...]
-                         (Array atmtype_out shp_out))
-                     shp_fun)
+              (Array (-> [arrtype_rest ...] arrtype_out) shp_fun)
               [expr_rest ...]
               arrtype_result
               env_3 archive_3
@@ -358,9 +349,10 @@
               ;; for environment-application results to provide new info.
               e:expr_fm [e:expr_rest ...])
    --- app:->*f
-   (synth-app env_0 archive_0
+   (synth-app [env-entry_0 ...] archive_0
               e:expr_fun
-              (Array (-> [arrtype_in arrtype_rest ...] arrtype_out)
+              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
+                         arrtype_out)
                      shp_fun)
               [expr_arg expr_rest ...]
               arrtype_result
@@ -368,32 +360,47 @@
               e:expr_fm [e:expr_arg e:expr_rest ...])]
   ;; Applying a monomorphic unary function array, where the argument array
   ;; provides the principal frame
-  [(where (env_r (Array atmtype_out shp_out))
-     (refine-array-type env_0 arrtype_out))
-   (where ([env-entry_0 ...] (Array atmtype_in shp_in))
-     (refine-array-type env_r arrtype_in))
-   (where svar_afrm ,(gensym '@AFRM))
+  [(where svar_afrm ,(gensym '@AFRM))
    (where svar_fext ,(gensym '@FEXT))
-   (where shp_afrm
-     ,(if (term (uses-exsvar? shp_in))
-          (term {Shp})
-          (term (^ svar_afrm))))
    (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_fext)] archive_0
-               expr_arg (Array atmtype_in {++ shp_afrm shp_in})
+               expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
                env_1 archive_1
                e:expr_arg)
-   (equate env_1 archive_1 shp_afrm {++ shp_fun (^ svar_fext)}
+   (equate env_1 archive_1 (^ svar_afrm) {++ shp_fun (^ svar_fext)}
            env_2 archive_2)
    (synth-app env_2 archive_2
               e:expr_fun
-              (Array (-> [arrtype_rest ...]
-                         (Array atmtype_out shp_out))
-                     shp_afrm)
+              (Array (-> [arrtype_rest ...] arrtype_out) (^ svar_afrm))
               [expr_rest ...]
               arrtype_result
               env_3 archive_3
               e:expr_fm [e:expr_rest ...])
    --- app:->*a
+   (synth-app [env-entry_0 ...] archive_0
+              e:expr_fun
+              (Array (-> [(Array atmtype_in shp_in) arrtype_rest ...]
+                         arrtype_out)
+                     shp_fun)
+              [expr_arg expr_rest ...]
+              arrtype_result
+              env_3 archive_3
+              e:expr_fm [e:expr_arg e:expr_rest ...])]
+  ;; Applying a monomorphic unary function array, where the expected input type
+  ;; mandates a scalar frame
+  [(side-condition (cell-polymorphic? arrtype_in))
+   (check/expr env_0 archive_0
+               expr_arg arrtype_in
+               env_1 archive_1 e:expr_arg)
+   (synth-app env_1 archive_1
+              e:expr_fun
+              (Array (-> [arrtype_rest ...]
+                         arrtype_out)
+                     shp_fun)
+              [expr_rest ...]
+              arrtype_result
+              env_2 archive_2
+              e:expr_fm [e:expr_rest ...])
+   --- App:->*c
    (synth-app env_0 archive_0
               e:expr_fun
               (Array (-> [arrtype_in arrtype_rest ...]
@@ -401,7 +408,7 @@
                      shp_fun)
               [expr_arg expr_rest ...]
               arrtype_result
-              env_3 archive_3
+              env_2 archive_2
               e:expr_fm [e:expr_arg e:expr_rest ...])]
   [(where (env_1 (Array atmtype_out shp_out))
      (refine-array-type env_0 arrtype_out))
@@ -1539,11 +1546,11 @@
   
   (test "vec+ -- recognize aliasing between argument dimensions"
         (judgment-holds
-         (synth/atom [(+ (DR (-> [Int Int] Int)))]
+         (synth/expr [(+ (DR (-> [Int Int] Int)))]
                      []
                      (rerank [1 1] +)
-                     type env archive e:atom)
-         {type env archive e:atom}))
+                     type env archive e:expr)
+         {type env archive e:expr}))
   
   (test "transpose+ -- instantiate polymorphic function, leading to dimension aliasing"
         (judgment-holds
