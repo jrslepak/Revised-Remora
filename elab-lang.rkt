@@ -284,8 +284,8 @@
    (t-app (apply-env/e:expr env e:expr) (apply-env/e:type env e:type) ...)]
   [(apply-env/e:expr env (i-app e:expr e:idx ...))
    (i-app (apply-env/e:expr env e:expr) (apply-env/e:idx env e:idx) ...)]
-  [(apply-env/e:expr env (unbox (var ... e:expr) e:expr))
-   (unbox (var ... (apply-env/e:expr env e:expr)) (apply-env/e:expr env e:expr))])
+  [(apply-env/e:expr env (unbox (var ... e:expr_s) e:expr_b))
+   (unbox (var ... (apply-env/e:expr env e:expr_s)) (apply-env/e:expr env e:expr_b))])
 
 (define-metafunction Remora-elab
   apply-env/e:ectx : env e:ectx -> e:ectx

@@ -70,6 +70,10 @@
                 _ ...]
                archive_2
                e:expr_b)
+   (kind-array [env-entry_n ...]
+               (apply-env/e:type
+                [env-entry_n ...]
+                (Array atmtype_b {++ shp_f shp_b})))
    --- syn:unbox
    (synth/expr [env-entry_0 ...]
                archive_0
@@ -1623,5 +1627,30 @@
   #;(define (m*m [a 2] [b 2])
       (~(0 0 2)reduce/zero + 0 (~(1 2)* a b)))
   
-  ;;; poly/monomorphic functions coexisting -- instantiate sub-array
-  )
+  (test "poly/monomorphic functions coexisting -- instantiate sub-array"
+        (judgment-holds
+         (synth/expr [(+ (DR (-> [Int Int] Int)))
+                      (fst (DR (∀ [&t]  (-> [&t &t] &t))))]
+                     []
+                     (frame {2} [+ fst])
+                     type env archive e:expr)
+         {type env archive e:expr}))
+
+  (test "poly/monomorphic functions conflicting -- inference is still order-dependent"
+        (judgment-holds
+         (synth/expr [(+ (DR (-> [Int Int] Int)))
+                      (fst (DR (∀ [&t]  (-> [&t &t] &t))))]
+                     []
+                     (frame {2} [fst +])
+                     _ _ _ _)))
+  
+  (test "build and consume a box"
+        (judgment-holds
+         (synth/expr [(length (DR (∀ [&t] (Π [$l @c] (-> [[&t $l @c]] Int)))))]
+                     []
+                     ((scl
+                       (λ [(x (Array (Σ [$d] (Array Int (Shp $d))) (Shp)))]
+                         (unbox ($l v x) (length v))))
+                      (scl (box 4 (array {4} [1 2 3 4]))))
+                     type env archive any)
+         {type env archive any})))
