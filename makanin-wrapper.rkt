@@ -164,17 +164,19 @@
   ;; Convert the equivalence relation on sequence element ID numbers into an
   ;; equivalence relation on syntactically encoded dims, and translate the
   ;; assignment so that its codomain is syntactic dims instead of ID numbers.
-  ;; TODO: Consistency check for updated archive
-  ;;  - Make sure (mixed-prefix?) ILP for dims in archive is SAT
-  ;;    - Disallow exvar depending on later univar
-  ;;    - Need to be able to build a concrete solution for exvars
-  ;;  - If ILP is UNIQUE-SAT, propagate the sole solution?
   (define translated-solns
     (for/stream ([s solns])
                 (define sym->id-list (first s))
                 (define id-eqv-reln (second s))
                 (update-env env archive id->idx sym->id-list id-eqv-reln)))
-  translated-solns)
+  (for/stream ([candidate translated-solns]
+               ;; TODO: Consistency check for updated archive
+               ;;  - Make sure (mixed-prefix?) ILP for dims in archive is SAT
+               ;;    - Disallow exvar depending on later univar
+               ;;    - Need to be able to build a concrete solution for exvars
+               ;;  - If ILP is UNIQUE-SAT, propagate the sole solution?
+               #:when (failure-free? (first candidate)))
+              candidate))
 (module+ test
   (check-equal? (stream->list (solutions '[] '[] '{Shp} '{Shp}))
                 '(([] [])))
@@ -210,7 +212,23 @@
                                          (term (^ @s))
                                          (term {Shp (^ $n) (^ $n)})))
                 '([(^ $s0) (^ $s1 (^ $s0)) (^ @s {Shp (^ $s0) (^ $s1)}) (^ $n (^ $s1))]
-                  [(≐ (^ $n) (^ $s0) (^ $s1))])))
+                  [(≐ (^ $n) (^ $s0) (^ $s1))]))
+  ;; Mixing universal and existential variables should only work if existentials
+  ;; are resolved as earlier-bound universals. If they depend on later-bound
+  ;; universals, then no solution is possible.
+  (check-equal? (stream->list (solutions '[(^ $x) $l] '[] '{Shp (^ $x)} '{Shp $l}))
+                '())
+  (check-equal? (stream->list (solutions '[$l (^ $x)] '[] '{Shp (^ $x)} '{Shp $l}))
+                '(([$l (^ $x $l)]
+                   [(≐ (^ $x) $l)]))))
+
+;;; Check whether an environment contains any existentials resolved as 'FAILURE.
+(define (failure-free? env)
+  (match env
+    [(cons (list '^ _ 'FAILURE) _) #f]
+    [(cons _ rest-env) (failure-free? rest-env)]
+    ['() #t]))
+
 
 ;;; Translate shp from redex's representation into makanin/solve representation
 (define ((shp->sequence ids) s)
@@ -290,6 +308,11 @@
 (define (resolve-dvars env eqv-reln)
   (reverse (resolve-dvars/rev (reverse env) (set) eqv-reln)))
 
+;;; TODO: For each unsolved exdvar d mentioned in an equivalence relation, find
+;;; a lower bound based on the dims it's related to. Each equality involving d
+;;; when solved for d gives a constant component k. If k>0, insert a fresh
+;;; exdvar d' in the environment before d, and solve d as d'+k.
+
 ;;; Given a reversed environment and an equivalence relation on dims, produce a
 ;;; new version of the environment which resolves existential dvars mentioned in
 ;;; the equivalence relation to linear combinations of dvars which appear
@@ -297,7 +320,7 @@
 ;;; there are no forward references in the resulting environment. The result
 ;;; environment is also reversed.
 ;;; Remora-elab:env [Set Remora-elab:dvar] [Listof [Set Remora-elab:dim]]
-;;; -> Remora-elab:env
+;;; -> [Listof [Remora-elab:env-entry U (^ DimVar 'FAILURE)]]
 (define (resolve-dvars/rev rev-env forbidden-dvars eqv-reln)
   (match rev-env
     ['() '()]
@@ -314,6 +337,8 @@
                                 eqv-reln))]
     ;; Search the equivalence relation for a solution. Add the result into the
     ;; environment, and recur on the rest, forbidding this exvar.
+    ;; TODO: If anything in the equivalence relation mentions a forbidden
+    ;; universal variable, this entire solution should be rejected.
     [(cons (list '^ (? dvar? d)) rest-env)
      (cons (resolve-dvar (first rev-env) forbidden-dvars eqv-reln)
            (resolve-dvars/rev rest-env
@@ -326,7 +351,8 @@
 
 ;;; Use an equivalence relation to find a way to rewrite a dimension variable
 ;;; in terms of other dimension variables not marked as "forbidden."
-;;; ExDimVar [Set DimVar] [Listof [Set Dim]] -> [List '^ DimVar Dim]
+;;; ExDimVar [Set DimVar] [Listof [Set Dim]]
+;;; -> [List '^ DimVar [Dim U 'FAILURE]] U [List '^ DimVar]
 (define (resolve-dvar dvar forbidden-dvars eqv-reln)
   ;; Find a specific equation to use. This must be two dimensions in the same
   ;; equivalence class which have differing coefficients for dvar and equal
@@ -342,15 +368,32 @@
                                            (= (coefficient fv lhs)
                                               (coefficient fv rhs)))))
                      (list lhs rhs)))))
+  ;; If dvar shares an equivalence class with any term mentioning a forbidden
+  ;; universal variable, we must return 'FAILURE as dvar's solution.
+  (define forbidden-uvar?
+    (for/or ([eqv-class eqv-reln])
+            (and
+             ;; Does this eqv class mention dvar?
+             (for/or ([dim eqv-class]) (mentions? dvar dim))
+             ;; Are any universals mentioned by this eqv class forbidden?
+             (for/or ([dim eqv-class])
+                     (define bad-uvars
+                       (set-intersect
+                        (for/set ([f (dim-vars dim)] #:when (dvar? f)) f)
+                        (for/set ([f forbidden-dvars] #:when (dvar? f)) f)))
+                     (not (set-empty? bad-uvars))))))
   (define found-equality
     (for/first ([eqv-class eqv-reln]
                 #:when (eqv-class->eqn eqv-class))
                (eqv-class->eqn eqv-class)))
-  (if found-equality
-      ;; With the two sides of the equation rewritten as coefficient hashes,
-      ;; isolate the chosen variable.
-      `(^ ,(second dvar) ,(isolate dvar (first found-equality) (second found-equality)))
-      `(^ ,(second dvar))))
+  (cond [forbidden-uvar? `(^ ,(second dvar) FAILURE)]
+        [found-equality
+         ;; With the two sides of the equation rewritten as coefficient hashes,
+         ;; isolate the chosen variable.
+         `(^ ,(second dvar)
+             ,(isolate dvar (first found-equality)
+                       (second found-equality)))]
+        [else `(^ ,(second dvar))]))
 
 
 ;;; Does this dimension mention the variable?
