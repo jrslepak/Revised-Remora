@@ -1474,7 +1474,7 @@
         (judgment-holds
          (synth/expr [(length (DR (∀ [&t] (Π [$l @c] (-> [[&t $l @c]] Int)))))]
                      []
-                     (length (array {3 2 4}
+                     (length (array {4 2 3}
                                     [ 1  2  3  4  5  6
                                       7  8  9 10 11 12
                                      13 14 15 16 17 18
@@ -1482,7 +1482,7 @@
                      type env archive e:expr)
          {type env archive e:expr}))
   
-  (test "nonempty vector norm -- instantiate polymorphic function"
+  (test "vector norm -- instantiate polymorphic function"
         (judgment-holds
          (synth/atom [(sqrt (DR (-> [Int] Int)))
                       (* (DR (-> [Int Int] Int)))
@@ -1498,7 +1498,7 @@
                      type env archive e:atom)
          {type env archive e:atom}))
   
-  (test "vector norm -- instantiate polymorphic function, propagate length constraint"
+  (test "nonempty vector norm -- instantiate polymorphic function, propagate length constraint"
         ;; The resulting type looks agnostic about input length, but using
         ;; an argument that's too short leads to an UNSAT constraint archive.
         (judgment-holds
