@@ -360,7 +360,8 @@
               e:expr_fm [e:expr_arg e:expr_rest ...])]
   ;; Applying a monomorphic unary function array, where the argument array
   ;; provides the principal frame
-  [(where svar_afrm ,(gensym '@AFRM))
+  [(side-condition ,(not (term (cell-polymorphic? (Array atmtype_in shp_in)))))
+   (where svar_afrm ,(gensym '@AFRM))
    (where svar_fext ,(gensym '@FEXT))
    (check/expr [env-entry_0 ... (^ svar_afrm) (^ svar_fext)] archive_0
                expr_arg (Array atmtype_in {++ (^ svar_afrm) shp_in})
