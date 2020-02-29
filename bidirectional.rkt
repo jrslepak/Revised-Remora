@@ -1661,4 +1661,22 @@
                        (λ [(x (Array (Σ [$d] (Array Int (Shp $d))) (Shp)))]
                          (unbox ($l v x) (reverse v))))
                       (scl (box 4 (array {4} [1 2 3 4]))))
-                     _ _ _ _))))
+                     _ _ _ _)))
+
+  (test "factorial -- unbox value made by primop"
+        (judgment-holds
+         (synth/atom [(+ (DR (-> [Int Int] Int)))
+                      (* (DR (-> [Int Int] Int)))
+                      (iota0 (DR (-> [Int] (Σ ($l) [Int $l]))))
+                      (reduce/0 (DR (∀ [&t]
+                                      (Π [$l @c]
+                                        (-> [(-> [[&t @c] [&t @c]] [&t @c])
+                                             [&t @c]
+                                             [&t $l @c]]
+                                            [&t @c])))))]
+                     []
+                     (λ [(x 0)]
+                       (unbox ($l v (iota0 x))
+                         (reduce/0 * (scl 0) (+ (scl 1) v))))
+                     type env archive e:atom)
+         {type env archive e:atom})))
