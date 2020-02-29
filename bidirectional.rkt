@@ -73,7 +73,7 @@
    (kind-array [env-entry_n ...]
                (apply-env/e:type
                 [env-entry_n ...]
-                (Array atmtype_b {++ shp_f shp_b})))
+                (elab-type (Array atmtype_b {++ shp_f shp_b}))))
    --- syn:unbox
    (synth/expr [env-entry_0 ...]
                archive_0
@@ -100,7 +100,7 @@
   [(synth/exprs env_0 archive_0
                 (expr ...) arrtype
                 env_1 archive_1 [e:expr ...])
-   (where (env_2 (Array atmtype shp)) (refine-array-type env_1 arrtype))
+   (where (env_2 (Array atmtype shp)) (articulate-array-type env_1 arrtype))
    (side-condition ,(= (apply * (term (natural ...)))
                        (length (term (expr ...)))))
    --- syn:frame
@@ -119,7 +119,7 @@
    --- syn:app
    (synth/expr env_0 archive_0
                (expr_f expr_a ...)
-               (apply-env/e:type env_2 arrtype_out)
+               (apply-env/type env_2 arrtype_out)
                env_2 archive_2
                (apply-env/e:expr env_2 (e:expr_fm e:expr_a ...)))])
 
@@ -285,7 +285,7 @@
    ;; monomorphized elaborated fn expr, elaborated arg exprs
    type env archive e:expr [e:expr ...])
   [(where ([env-entry_1 ...] (Array atmtype_fun shp_fun))
-     (refine-array-type [env-entry_0 ...] arrtype))
+     (articulate-array-type [env-entry_0 ...] arrtype))
    (synth-app [env-entry_1 ... (^ tvar) ...] archive_0
               (t-app e:expr_fp (^ tvar) ...)
               (subst* (Array atmtype_fun {++ shp_all shp_fun})
@@ -303,7 +303,7 @@
               (apply-env/e:expr env_1 e:expr_fm)
               [e:expr_arg ...])]
   [(where ([env-entry_1 ...] (Array atmtype_fun shp_fun))
-     (refine-array-type [env-entry_0 ...] arrtype))
+     (articulate-array-type [env-entry_0 ...] arrtype))
    (synth-app [env-entry_1 ... (^ ivar) ...] archive_0
               (i-app e:expr_fp (^ ivar) ...)
               (subst* (Array atmtype_fun {++ shp_all shp_fun})
@@ -416,7 +416,7 @@
               env_2 archive_2
               e:expr_fm [e:expr_arg e:expr_rest ...])]
   [(where (env_1 (Array atmtype_out shp_out))
-     (refine-array-type env_0 arrtype_out))
+     (articulate-array-type env_0 arrtype_out))
    --- app:->0
    (synth-app env_0 archive_0
               e:expr_fun
