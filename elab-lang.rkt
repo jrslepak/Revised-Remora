@@ -464,7 +464,7 @@
 (define-metafunction Remora-elab
   coerce-each : arrtype e:ectx -> e:ectx
   [(coerce-each arrtype e:ectx)
-   ((array {} [(λ ((c arrtype)) (in-hole e:ectx c))]) hole)])
+   ((array {} [(λ ((c (elab-type arrtype))) (in-hole e:ectx c))]) hole)])
 
 
 

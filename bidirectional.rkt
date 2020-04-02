@@ -530,8 +530,9 @@
     ;; Each shp_c cell needs to get wrapped in the ∀ by tη expansion
     (coerce-each
      (Array atmtype_lo shp_c)
-     (scl (tλ [tvar ...]
-              (lift-atom-coercion atmtype_lo e:ectx))))
+     (array {}
+            [(tλ [(tvar->bind tvar) ...]
+                (coerce-each (Array atmtype_lo {Shp}) e:ectx))]))
     #;
     ((array
       {}
@@ -568,7 +569,7 @@
     ((array
       {}
       [(λ ((c (Array atmtype_hi shp_c)))
-         (array {} [(iλ [ivar ...] c)]))])
+         (array {} [(iλ [(ivar->bind ivar) ...] c)]))])
      e:ectx))]
   ;; Here we have something regular but need to put it in the form used by
   ;; irregular data.
