@@ -18,12 +18,16 @@
   (atom base-val
         fn
         (tuple expr ...)
-        (tλ [(var kind) ...] val)
-        (iλ [(var sort) ...] val)
+        (tλ [(var kind) ...] expr)
+        (iλ [(var sort) ...] expr)
         (box idx ... expr type))
   (base-val integer boolean)
   (fn op (λ [(var type) ...] expr))
-  (atval base-val fn (tuple val ...) (box idx ... val type))
+  (atval base-val
+         fn
+         (tλ [(var kind) ...] expr)
+         (iλ [(var sort) ...] expr)
+         (box idx ... val type))
   (expr var
         ;; Array literal: give shape and (row-major) sequence of atoms
         (array {natural ...} [atom ...])
@@ -60,7 +64,7 @@
       %length %shape %reduce %iota %reshape)
   (val var
        (array {natural ...}
-              (atom ...))
+              (atval ...))
        (array {natural ...}
               type))
   ;; Type-level pieces
