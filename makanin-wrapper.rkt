@@ -28,7 +28,7 @@
  archive archive-entry)
 
 
-;;; Env Archive [Hash Nat [Dim U SVar]] [Hash SVar [Listof Nat]] [Listof [Set Nat]]
+;;; Env Archive [Hash Nat [Dim U SVar]] [Hash SVar [Vectorof Nat]] [Listof [Set Nat]]
 ;;; -> [List Env Archive] U #f
 (define (update-env env archive id->idx sym->id-list id-eqv-reln)
   (define dim-eqv-reln
@@ -55,7 +55,7 @@
   (and (for/and ([c dim-eqv-reln]) (set? c))
        ;; At this point, we know the equivalence relation only relates dims with
        ;; dims and universal shape variables with themselves.
-       (let* ([sym->idx-list (elaborate-svars sym->id-list id->idx)]
+       (let* ([sym->idx-list (elaborate-svars env sym->id-list id->idx)]
               [env/elaborated (elaborate-exsvar-entries env sym->idx-list)]
               [dim-eqv-reln/fresh-dvars
                (for/fold ([eqv dim-eqv-reln])
@@ -67,7 +67,7 @@
               [env/dvars (resolve-dvars env/elaborated dim-eqv-reln/fresh-dvars)]
               [archive/new-eqv-reln
                   (append (for/list ([dim-eqv-class dim-eqv-reln/fresh-dvars]
-                                     #:unless (= 1 (set-count dim-eqv-class)))
+                                     #:unless (>= 1 (set-count dim-eqv-class)))
                                     (cons '≐ (set->list dim-eqv-class)))
                           archive)])
          (list env/dvars archive/new-eqv-reln))))
@@ -75,31 +75,59 @@
 ;;; Generate fresh existential dimension variables for positions in a solved
 ;;; existential shape variable which correspond to single dimensions, and leave
 ;;; positions corresponding to universal shape variables as those variables.
-;;; [Hash SVar [Listof Nat]] [Hash Nat [Dim U Svar]]
-;;; -> [Listof Shp]
-(define (elaborate-svars sym->id-list id->idx)
-  #;(printf "Elaborating solution:\n~v\n~v\n\n" sym->id-list id->idx)
-  (for/hash
-   ([(svar _) sym->id-list])
-   (values
-    svar
-    (for/list
-     ([component-id (hash-ref sym->id-list svar '())]
-      [i (in-naturals)])
-     ;; TODO: What if this component is unconstrained so the hash contains #f?
-     ;; For now, treating any unconstrained position as a 0 dimension.
+;;; Env [Hash SVar [Vectorof Nat]] [Hash Nat [Dim U SVar]]
+;;; -> [Hash SVar [Listof [Shp U 'FAILURE]]]
+(define (elaborate-svars env sym->id-list id->idx)
+  (elaborate-svars/rev (reverse env) sym->id-list id->idx))
+(define (elaborate-svars/rev rev-env sym->id-list id->idx)
+  (define-values (_ elaborated)
+    (for/fold ([forbidden (set)]
+               [result (hash)])
+              ([env-entry rev-env])
+      (cond
+        ;; Existential shape variable that got solved
+        [(and (exsvar? env-entry)
+              (hash-has-key? sym->id-list (second env-entry)))
+         (values forbidden
+                 (hash-set result
+                           (second env-entry)
+                           (elaborate-svar (second env-entry)
+                                           forbidden
+                                           sym->id-list id->idx)))]
+        ;; Existential shape variable that didn't get solved
+        [(exsvar? env-entry) (values forbidden result)]
+        ;; Universal shape variable
+        [(svar? env-entry) (values (set-add forbidden env-entry) result)]
+        ;; Any other kind of environment entry
+        [else (values forbidden result)])))
+  elaborated)
+
+;;; SVar [Set SVar] [Hash SVar [Vectorof Nat]] [Hash Nat [Dim U SVar]]
+;;; -> [Listof [Dim U SVar U 'FAILURE]]
+(define (elaborate-svar svar forbidden-svars sym->id-list id->idx)
+  (for/list
+   ([component-id (hash-ref sym->id-list svar '())]
+    [i (in-naturals)])
+   (let* ([component (hash-ref id->idx component-id)])
+     ;; TODO: What if this component is unconstrained, so the hash
+     ;; contains #f? For now, treating any unconstrained position
+     ;; as a 0 dimension.
      (cond [(not component-id) '{Shp 0}]
-           [(svar? (hash-ref id->idx component-id))
-            (hash-ref id->idx component-id)]
+           ;; If this component is a later-bound universal, we can't use
+           ;; it in the solution. Mark it as a failed solution.
+           [(and (svar? component)
+                 (set-member? forbidden-svars component)) 'FAILURE]
+           [(svar? component) component]
            [else
             `(Shp (^ ,(string->symbol (format
                                        "$~a~a"
                                        (substring
-                                        (symbol->string svar) 1) i))))])))))
+                                        (symbol->string svar) 1) i))))]))))
 
 ;;; For each svar in the given solution hash, elaborate piece of the environment
 ;;; to include entries for the newly-generated ^dvar components.
-;;; Env [Hash SVar [Listof Shp]] -> Env
+;;; Env [Hash SVar [Listof [Shp U 'FAILURE]]]
+;;; -> [Listof [EnvEntry U (^ SVar 'FAILURE)]]
 (define (elaborate-exsvar-entries env sym->idx-list)
   (match env
     [(cons (list '^ (? svar? svar)) rest-env)
@@ -111,10 +139,11 @@
                  (second component)))
      (append new-entries
              (list
-              (if (hash-has-key? sym->idx-list svar)
-                  `(^ ,svar ,(term (Inormalize-idx
-                                    ,(cons '++ (hash-ref sym->idx-list svar)))))
-                  `(^ ,svar)))
+              (cond [(not (hash-has-key? sym->idx-list svar)) `(^ ,svar)]
+                    [(idx? (cons '++ (hash-ref sym->idx-list svar #f)))
+                     `(^ ,svar ,(term (Inormalize-idx
+                                       ,(cons '++ (hash-ref sym->idx-list svar)))))]
+                    [else `(^ ,svar FAILURE)]))
              (elaborate-exsvar-entries rest-env sym->idx-list))]
     [(cons env-entry rest-env)
      (cons env-entry (elaborate-exsvar-entries rest-env sym->idx-list))]
@@ -123,7 +152,7 @@
 ;;; Expand the equivalence class for each component id mentioned in the shape
 ;;; variable's solution to include the existential dimension variable generated
 ;;; for the corresponding position.
-;;; [Listof [Set Remora-elab:dim]] [Listof Shp] [Listof Nat] [Hash Nat [Dim U SVar]]
+;;; [Listof [Set Dim]] [Listof Shp] [Listof Nat] [Hash Nat [Dim U SVar]]
 ;;; -> [Listof [Set Nat]]
 (define (augment-eqv-reln dim-eqv-reln fresh-components component-ids id->idx)
   ;; Update each equivalence class. If an element ID which appears at the same
@@ -220,7 +249,13 @@
                 '())
   (check-equal? (stream->list (solutions '[$l (^ $x)] '[] '{Shp (^ $x)} '{Shp $l}))
                 '(([$l (^ $x $l)]
-                   [(≐ (^ $x) $l)]))))
+                   [(≐ (^ $x) $l)])))
+  (check-equal? (stream->list
+                 (solutions '[(?i lol) (^ @q) (^ @r) @t] '[] '@t '(^ @q)))
+                '())
+  (check-equal? (stream->list
+                 (solutions '[(?i lol) @t (^ @q) (^ @r)] '[] '@t '(^ @q)))
+                '(([(?i lol) @t (^ @q @t) (^ @r)] []))))
 
 ;;; Check whether an environment contains any existentials resolved as 'FAILURE.
 (define (failure-free? env)
@@ -284,7 +319,7 @@
 
 ;;; Convert a solution which maps existential shape variables to component IDs
 ;;; into a solution which maps them to sets of indices.
-;;; [Hash SVar [Listof Nat]]
+;;; [Hash SVar [Vectorof Nat]]
 ;;; [Hash Nat Idx]
 ;;; [Listof [Set Nat]]
 ;;; -> [Hash SVar [Listof [Set Shp]]
@@ -319,8 +354,8 @@
 ;;; earlier in the environment. Keep track of the later-bound dvars to ensure
 ;;; there are no forward references in the resulting environment. The result
 ;;; environment is also reversed.
-;;; Remora-elab:env [Set Remora-elab:dvar] [Listof [Set Remora-elab:dim]]
-;;; -> [Listof [Remora-elab:env-entry U (^ DimVar 'FAILURE)]]
+;;; [Listof [EnvEntry U (^ SVar 'FAILURE)]] [Set DVar] [Listof [Set Dim]]
+;;; -> [Listof [EnvEntry U (^ SVar 'FAILURE) U (^ DVar 'FAILURE)]]
 (define (resolve-dvars/rev rev-env forbidden-dvars eqv-reln)
   (match rev-env
     ['() '()]
@@ -370,6 +405,8 @@
                      (list lhs rhs)))))
   ;; If dvar shares an equivalence class with any term mentioning a forbidden
   ;; universal variable, we must return 'FAILURE as dvar's solution.
+  ;; TODO: Relax this to allow uvar mentions that are removable by cancelling
+  ;; out coefficients
   (define forbidden-uvar?
     (for/or ([eqv-class eqv-reln])
             (and
