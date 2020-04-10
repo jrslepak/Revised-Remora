@@ -462,7 +462,6 @@
                  atmtype exatmvar
                  env_1 archive_1 e:actx)])
 (define-judgment-form Remora-elab
-  ;; TODO: sub:ΣL, sub:ΣR
   #:mode (subtype/expr I I I I O O O)
   #:contract (subtype/expr env archive arrtype arrtype env archive e:ectx)
   [;; TODO: occurs check
@@ -586,12 +585,34 @@
     (Array atmtype_lo shp_lo)
     (Array (Σ [ivar ...] (Array atmtype_hi shp_c)) shp_f)
     [env-entry_1 ...] archive_1
-    (apply-env/e:ectx env_1
-                      (coerce-each
-                       (subst* (Array atmtype_hi shp_c) [(ivar (^ ivar)) ...])
-                       (array []
-                              {(box (^ ivar) ... hole
-                                    (Σ [(ivar->bind ivar) ...] (Array atmtype_hi shp_c)))}))))]
+    (apply-env/e:ectx
+     env_1
+     (coerce-each
+      (subst* (Array atmtype_hi shp_c) [(ivar (^ ivar)) ...])
+      (array []
+             {(box (^ ivar) ... hole
+                   (Σ [(ivar->bind ivar) ...] (Array atmtype_hi shp_c)))}))))]
+  [(where svar_ch ,(gensym '@CH_))
+   (equate
+    [env-entry_0 ... (^ svar_ch)] archive_0
+     {++ shp_f (^ svar_ch)} shp_hi
+    [env-entry_1 ...] archive_1)
+   (subtype/expr
+    [env-entry_1 ... ivar ...] archive_1
+    (Array atmtype_lo shp_c)
+    (Array atmtype_hi (apply-env/e:idx [env-entry_1 ...] (^ svar_ch)))
+    [env-entry_2 ... ivar ... _ ...] archive_2
+    e:ectx)
+   (where evar_s ,(gensym 'BC_))
+   (where [ivar_s ...]
+     ,(map gensym (term [ivar ...])))
+   --- sub:ΣL
+   (subtype/expr
+    [env-entry_0 ...] archive_0
+    (Array (Σ [ivar ...] (Array atmtype_lo shp_c)) shp_f)
+    (Array atmtype_hi shp_hi)
+    [env-entry_2 ...] archive_2
+    (unbox (ivar_s ... evar_s hole) (in-hole (subst* e:ectx [(ivar ivar_s) ...]) evar_s)))]
   [(where [(atmvar_in svar_in) ...]
      ,(build-list
        (length (term [arrtype_in ...]))
@@ -889,7 +910,30 @@
                 (in-hole (coerce-each
                           (Array atmtype shp_c)
                           (array {} [(iλ [(ivar->bind ivar_a) ...] hole)]))
-                         e:ectx))])
+                         e:ectx))]
+  [(where var_sm ,(gensym 'SM_))
+   (instL/array [env-entry_l ...
+                 (^ tvar) env-entry_r ...
+                 (?i var_sm) (^ ivar_a) ...]
+                archive_0
+                (^ tvar)
+                (subst* (Array atmtype {++ shp_f shp_c})
+                        [(ivar_a (^ ivar_a)) ...])
+                [env-entry_1 ... (?i var_sm) _ ...]
+                archive_1
+                e:ctx)
+   --- ArrL:Σ*
+   (instL/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
+                (^ tvar) (Array (Σ [ivar_a ...] (Array atmtype shp_c)) shp_f)
+                [env-entry_1 ...] archive_1
+                (in-hole
+                 (coerce-each
+                  (subst* (Array atmtype shp_c) [(ivar_a (^ ivar_a)) ...])
+                  (array {} [(box (^ ivar_a) ...
+                                  hole
+                                  (Σ [(ivar->bind ivar_a) ...]
+                                     (Array atmtype shp_c)))]))
+                 e:ctx))])
 
 (define-judgment-form Remora-elab
   #:mode (instR/array I I I I O O O)
@@ -1005,9 +1049,24 @@
    (where [env-entry_2 ... (?i var_sm) _ ...] env_1)
    --- ArrR:Π*
    (instR/array [env-entry_0 ... (^ tvar) env_entry_1 ...] archive_0
-                (Array (∀ [ivar_a ...] (Array atmtype shp_c)) shp_f) (^ ivar)
+                (Array (Π [ivar_a ...] (Array atmtype shp_c)) shp_f) (^ ivar)
                 [env-entry_2 ...] archive_1
-                (apply-env/e:ectx env_1 (in-hole e:ectx (i-app hole (^ ivar_a) ...))))])
+                (apply-env/e:ectx
+                 env_1 (in-hole e:ectx (i-app hole (^ ivar_a) ...))))]
+  [(where evar_s ,(gensym 'BC_))
+   (where [ivar_s ...]
+     ,(map gensym (term [ivar_a ...])))
+   (kind-array [env-entry_l ... (^ tvar) env-entry_r ...]
+               (elab-type (Array atmtype shp_c)))
+   (instR/array [env-entry_l ... (^ tvar) env-entry_r ... ivar_a ...] archive_0
+                (Array atmtype {++ shp_f shp_c}) (^ tvar)
+                [env-entry_1 ... ivar_a ... _ ...] archive_1
+                e:ctx)
+   --- ArrR:Σ*
+   (instR/array [env-entry_l ... (^ tvar) env-entry_r ...] archive_0
+                (Array (Σ [ivar_a ...] (Array atmtype shp_c)) shp_f) (^ tvar)
+                [env-entry_1 ...] archive_1
+                (in-hole e:ctx (unbox (ivar_s ... evar_s hole) evar_s)))])
 
 
 ;;; Provide a judgment-form version of the logic used to interpret the solver's
