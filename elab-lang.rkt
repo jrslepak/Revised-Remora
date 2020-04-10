@@ -127,10 +127,18 @@
         (term (uses-svar? shp)))]
   [(cell-polymorphic? _) #f])
 
+;;; Collapse associative nesting structure of an index
+;;; TODO: Switch from normalizing to canonicalizing
 (define-metafunction Remora-elab
   Inormalize-idx : idx -> nidx
   [(Inormalize-idx {Shp dim ...})
    {Shp (Inormalize-idx dim) ...}]
+  [(Inormalize-idx {- dim_0 dim_1}) {- (Inormalize-idx dim_0) (Inormalize-idx dim_1)}]
+  [(Inormalize-idx {+ dim_0 ... {- dim_1 dim_2} dim_3 ... {- dim_4 dim_5} dim_6 ...})
+   {+ dim_0 ... {- dim_1 {+ dim_2 dim_5}} dim_3 ... dim_4 dim_6 ...}]
+  [(Inormalize-idx {+ dim_0 ... {- dim_1 dim_2} dim_3 ...})
+   {- (Inormalize-idx {+ dim_0 ... dim_1 dim_3 ...})
+      (Inormalize-idx dim_2)}]
   [(Inormalize-idx {+ dim_0 ... {+ dim_1 ...} dim_2 ...})
    (Inormalize-idx {+ dim_0 ... dim_1 ... dim_2 ...})]
   [(Inormalize-idx {+ dim_0 ... natural_0 dim_1 ... natural_1 dim_2 ...})

@@ -55,7 +55,9 @@
   (kind Array Atom)
   ;; Index level
   (dim dvar natural {+ dim ...})        ; any dimension
-  (ndim adim {+ adim adim ...+})        ; normalized dimension
+  (ndim adim pdim mdim)                 ; normalized dimension
+  (pdim adim {+ adim adim ...+})        ; plus dimension
+  (mdim {- pdim pdim})                  ; minus dimension
   (adim dvar natural)                   ; atomic dimensions
   (shp svar {Shp dim ...} {++ shp ...}) ; any shape
   (nshp fshp {++ fshp fshp ...+} {Shp}) ; normalized shape
