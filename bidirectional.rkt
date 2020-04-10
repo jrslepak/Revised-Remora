@@ -558,13 +558,13 @@
     [env-entry_0 ... ivar ...] archive_0
     (Array atmtype_lo shp_lo)
     (Array atmtype_hi {++ shp_f shp_c})
-    env_1 archive_1 e:ectx)
+    [env-entry_1 ... ivar ... _ ...] archive_1 e:ectx)
    --- sub:ΠR
    (subtype/expr
     [env-entry_0 ...] archive_0
     (Array atmtype_lo shp_lo)
     (Array (Π [ivar ...] (Array atmtype_hi shp_c)) shp_f)
-    env_1 archive_1
+    [env-entry_1 ...] archive_1
     ;; Each shp_c cell needs to get wrapped in the ∀ by iη expansion
     ((array
       {}
